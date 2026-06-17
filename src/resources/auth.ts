@@ -1,0 +1,105 @@
+import type { HttpClient } from "../http";
+import type {
+  ConnectInput,
+  LoginData,
+  LoginResult,
+  RegisterInput,
+  TwoFactorInput,
+} from "../models";
+
+/** Login, 2FA, token refresh, registration and logout. */
+export class AuthResource {
+  constructor(private readonly http: HttpClient) {}
+
+  /**
+   * Log in. On success tokens are stored automatically and
+   * `{ twoFactorRequired: false }` is returned. If 2FA is enabled the result is
+   * `{ twoFactorRequired: true, twoFactorResponse }` — pass that blob to
+   * {@link connectWithTwoFactor} together with the SMS code.
+   */
+  async connect(input: ConnectInput): Promise<LoginResult> {
+    const data = await this.http.request<LoginData>({
+      method: "POST",
+      path: "/general/connectApi",
+      auth: "public",
+      body: {
+        apiUserName: input.apiUserName,
+        apiUserPassword: input.apiUserPassword,
+        apiClientId: input.clientId ?? this.http.clientId,
+        apiSecretKey: input.clientSecret ?? this.http.clientSecret,
+        loginMode: input.loginMode,
+        ...(input.withPhoneNumber !== undefined
+          ? { withPhoneNumber: input.withPhoneNumber }
+          : {}),
+      },
+    });
+
+    if (data.access_token) {
+      await this.storeTokens(data);
+      return { twoFactorRequired: false, passwordPolicy: data.password_policy };
+    }
+    if (data.response) {
+      return { twoFactorRequired: true, twoFactorResponse: data.response };
+    }
+    return { twoFactorRequired: false };
+  }
+
+  /** Complete a 2FA login with the SMS code and the challenge blob. */
+  async connectWithTwoFactor(input: TwoFactorInput): Promise<void> {
+    const data = await this.http.request<LoginData>({
+      method: "POST",
+      path: "/general/connectApiWithTwoFactor",
+      auth: "public",
+      body: { smsVerificationCode: input.smsVerificationCode, response: input.response },
+    });
+    await this.storeTokens(data);
+  }
+
+  /** Register a new patient (afterRegister auto-login). Stores tokens on success. */
+  async register(input: RegisterInput): Promise<void> {
+    const data = await this.http.request<LoginData>({
+      method: "POST",
+      path: "/patients/addNewPatient",
+      auth: "public",
+      body: {
+        name: input.name,
+        surname: input.surname,
+        apiUserName: input.apiUserName,
+        phoneNumber: input.phoneNumber,
+        password: input.password,
+        smsVerificationCode: input.smsVerificationCode,
+        response: input.response,
+        acceptUserAgreement: input.acceptUserAgreement ?? 1,
+        apiClientId: input.clientId ?? this.http.clientId,
+        apiSecretKey: input.clientSecret ?? this.http.clientSecret,
+      },
+    });
+    await this.storeTokens(data);
+  }
+
+  /** Manually refresh the access token using the stored refresh token. */
+  refresh(): Promise<void> {
+    return this.http.refresh();
+  }
+
+  /** Revoke the current tokens server-side and clear the local token store. */
+  async disconnect(): Promise<void> {
+    try {
+      await this.http.request<unknown>({
+        method: "POST",
+        path: "/general/disconnectApi",
+        auth: "bearer",
+        body: {},
+      });
+    } finally {
+      await this.http.tokenStore.clear();
+    }
+  }
+
+  private async storeTokens(data: LoginData): Promise<void> {
+    if (!data.access_token) {
+      throw new Error("Login response did not contain an access token");
+    }
+    await this.http.tokenStore.setTokens(data.access_token, data.refresh_token ?? null);
+  }
+}
