@@ -6,6 +6,8 @@ export type { TokenStore } from "./token-store";
 export { ENVIRONMENT_BASE_URLS } from "./config";
 export type { ClientOptions, Environment, FetchLike } from "./config";
 
+export type { AuthMode, RequestSpec } from "./http";
+
 export {
   ApiError,
   AuthenticationError,

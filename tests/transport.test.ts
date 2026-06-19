@@ -30,6 +30,44 @@ describe("transport", () => {
     expect(bodyOf(calls[0]!)).toEqual({ searchText: "kardiyo", listType: null, location: null });
   });
 
+  it("request() escape hatch calls an arbitrary path with a bearer token", async () => {
+    const { fetchImpl, calls } = makeFetch(() =>
+      jsonResponse({ resultType: 0, data: { ok: true } }),
+    );
+    const client = new BulutklinikClient({
+      environment: "test",
+      fetch: fetchImpl,
+      tokenStore: new MemoryTokenStore({ accessToken: "abc" }),
+    });
+
+    const res = await client.request<{ ok: boolean }>({
+      method: "GET",
+      path: "/patients/customEndpoint",
+    });
+
+    expect(res).toEqual({ ok: true });
+    expect(calls[0]!.url).toBe("https://apitest.bulutklinik.com/api/v3/patients/customEndpoint");
+    expect(calls[0]!.init.method).toBe("GET");
+    expect(authHeader(calls[0]!)).toBe("Bearer abc");
+  });
+
+  it("request() escape hatch sends a public POST body and unwraps data", async () => {
+    const { fetchImpl, calls } = makeFetch(() => jsonResponse({ resultType: 0, data: { id: 7 } }));
+    const client = new BulutklinikClient({ environment: "test", fetch: fetchImpl });
+
+    const res = await client.request({
+      method: "POST",
+      path: "/general/somePublicEndpoint",
+      auth: "public",
+      body: { foo: "bar" },
+    });
+
+    expect(res).toEqual({ id: 7 });
+    expect(calls[0]!.init.method).toBe("POST");
+    expect(authHeader(calls[0]!)).toBeNull();
+    expect(bodyOf(calls[0]!)).toEqual({ foo: "bar" });
+  });
+
   it("maps 422 to ValidationError", async () => {
     const { fetchImpl } = makeFetch(() =>
       jsonResponse({ resultType: 1, errorType: "validation", errorMessage: "bad" }, 422),

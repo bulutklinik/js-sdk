@@ -1,5 +1,6 @@
 import { resolveConfig, type ClientOptions } from "./config";
-import { HttpClient } from "./http";
+import { HttpClient, type AuthMode, type RequestSpec } from "./http";
+import type { Lang } from "./types";
 import { AppointmentsResource } from "./resources/appointments";
 import { AuthResource } from "./resources/auth";
 import { DoctorsResource } from "./resources/doctors";
@@ -46,5 +47,33 @@ export class BulutklinikClient {
     this.appointments = new AppointmentsResource(this.http);
     this.payments = new PaymentsResource(this.http);
     this.measures = new MeasuresResource(this.http);
+  }
+
+  /**
+   * Escape hatch: call any Bulutklinik API endpoint that does not yet have a
+   * typed resource method. The request still goes through the shared transport,
+   * so default headers, the chosen `auth` mode (`bearer` by default), silent
+   * token refresh + retry, envelope unwrapping and typed errors all apply.
+   * Returns the unwrapped `data` payload. Prefer a typed resource method when
+   * one exists.
+   *
+   * @example
+   * ```ts
+   * const branches = await client.request({ method: "GET", path: "/patients/allBranches" });
+   * const created = await client.request({
+   *   method: "POST",
+   *   path: "/patients/someNewEndpoint",
+   *   body: { foo: "bar" },
+   * });
+   * ```
+   */
+  request<T = unknown>(spec: {
+    method: RequestSpec["method"];
+    path: string;
+    auth?: AuthMode;
+    body?: unknown;
+    lang?: Lang;
+  }): Promise<T> {
+    return this.http.request<T>({ auth: "bearer", ...spec });
   }
 }
