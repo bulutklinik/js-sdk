@@ -280,3 +280,59 @@ export interface PartnerHealthInput {
   phoneNumber?: string;
   data: MeasureRecord[];
 }
+
+// ---------- skin (AI image analysis — "Cildimde Neyim Var") ----------
+
+/** One skin photo to analyze. `image` is base64 (a `data:…;base64,` prefix is allowed). */
+export interface SkinImage {
+  image: string;
+  /** Optionally tag the stored media with a clinic branch. */
+  branch_id?: number;
+}
+
+/** Per-image analysis result. Fields may be empty/null when the classifier is uncertain. */
+export interface SkinAnalysis {
+  id: number;
+  isClear?: boolean;
+  isBright?: boolean;
+  /** Lesion class from the classifier. */
+  label?: string;
+  /** Patient-friendly Turkish AI summary. */
+  comment?: string | null;
+  confidence?: number | null;
+  /** Stored media relative path. */
+  image?: string | null;
+  error?: string | null;
+  /** Candidate ICD code(s). */
+  possible_icd?: unknown;
+  /** Opaque encrypted blob; can be forwarded verbatim as a payment's `caseDetail`. */
+  case_detail?: string;
+  [k: string]: unknown;
+}
+
+export interface SkinAnalysisResult {
+  status: SkinAnalysis[];
+  [k: string]: unknown;
+}
+
+// ---------- meals (AI meal-photo analysis) ----------
+
+export type PortionSize = "small" | "medium" | "large" | "custom";
+export type MealType = "breakfast" | "lunch" | "dinner" | "snack";
+
+export interface MealAnalysisInput {
+  /** Base64 image (a `data:…;base64,` prefix is allowed). */
+  image: string;
+  portionSize: PortionSize;
+  /** Required when `portionSize` is `custom`. */
+  portionGrams?: number;
+  mealType: MealType;
+  /** Optional Turkish note (≤1000 chars); the model reads preparation/portion modifiers. */
+  note?: string;
+}
+
+export interface MealAnalysisResult {
+  /** The model's nutrition breakdown; `comment` is a JSON-object string. */
+  status: { comment?: string; [k: string]: unknown };
+  [k: string]: unknown;
+}

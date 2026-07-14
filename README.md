@@ -71,6 +71,8 @@ await client.appointments.reserveInterview({
 | `client.appointments` | `reserveInterview`, `addPhysical`, `cancel` |
 | `client.payments`     | `checkDiscountCode`, `getCards`, `saveCard`, `pay`, `deleteCard` |
 | `client.measures`     | `addList`, `add`, `update`, `delete`, `last`, `list`, `graph`, `partnerHealthInformation` |
+| `client.skin`         | `analyze` |
+| `client.meals`        | `analyze` |
 
 ## Authentication & tokens
 
@@ -118,6 +120,27 @@ await client.measures.graph("tension", 2, 1); // period 2 = weekly
 > `partnerToken`. Note: the API currently matches the patient by `phoneNumber`
 > (a server-side bug nulls `identity` during validation); send both for forward
 > compatibility.
+
+## AI image analysis
+
+```ts
+// "Cildimde Neyim Var" — analyze one or more skin photos (base64)
+const { status } = await client.skin.analyze([{ image: base64Jpeg }]);
+for (const s of status) {
+  console.log(s.label, s.comment, s.possible_icd);
+  // s.case_detail can be forwarded verbatim as a payment's caseDetail
+}
+
+// Meal photo → calorie/nutrition estimate
+const meal = await client.meals.analyze({
+  image: base64Jpeg,
+  portionSize: "medium", // small | medium | large | custom
+  mealType: "lunch",     // breakfast | lunch | dinner | snack
+  // portionGrams: 300,  // required when portionSize is "custom"
+  // note: "az yağlı",
+});
+console.log(meal.status.comment);
+```
 
 ## Errors
 

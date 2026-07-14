@@ -28,5 +28,7 @@ export { SlotsResource } from "./resources/slots";
 export { AppointmentsResource } from "./resources/appointments";
 export { PaymentsResource } from "./resources/payments";
 export { MeasuresResource } from "./resources/measures";
+export { SkinResource } from "./resources/skin";
+export { MealsResource } from "./resources/meals";
 
 export * from "./models";

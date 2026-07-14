@@ -4,8 +4,10 @@ import type { Lang } from "./types";
 import { AppointmentsResource } from "./resources/appointments";
 import { AuthResource } from "./resources/auth";
 import { DoctorsResource } from "./resources/doctors";
+import { MealsResource } from "./resources/meals";
 import { MeasuresResource } from "./resources/measures";
 import { PaymentsResource } from "./resources/payments";
+import { SkinResource } from "./resources/skin";
 import { SlotsResource } from "./resources/slots";
 import type { TokenStore } from "./token-store";
 
@@ -31,6 +33,10 @@ export class BulutklinikClient {
   readonly appointments: AppointmentsResource;
   readonly payments: PaymentsResource;
   readonly measures: MeasuresResource;
+  /** "Cildimde Neyim Var" — AI skin-lesion analysis. */
+  readonly skin: SkinResource;
+  /** AI meal-photo calorie/nutrition estimation. */
+  readonly meals: MealsResource;
   /** The active token store (also accepts a custom one via options). */
   readonly tokenStore: TokenStore;
 
@@ -47,6 +53,8 @@ export class BulutklinikClient {
     this.appointments = new AppointmentsResource(this.http);
     this.payments = new PaymentsResource(this.http);
     this.measures = new MeasuresResource(this.http);
+    this.skin = new SkinResource(this.http);
+    this.meals = new MealsResource(this.http);
   }
 
   /**
