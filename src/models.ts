@@ -336,3 +336,47 @@ export interface MealAnalysisResult {
   status: { comment?: string; [k: string]: unknown };
   [k: string]: unknown;
 }
+
+// ---------- laboratory ----------
+
+/** Body for `laboratory.order` — pre-order a lab test. All fields required. */
+export interface LabOrderInput {
+  testId: number | string;
+  addressId: number | string;
+  laboratoryId: number | string;
+}
+
+/** One entry in the patient's lab results list (`results.foundTests[]`). */
+export interface LabResultListItem {
+  /** DB id (`"123"`) or a TMC-lab id with a `-lab` suffix (`"4821-lab"`). */
+  id: number | string;
+  created_at?: string;
+  company_name?: string;
+  test_name?: string;
+  /** 0=Numune Alınıyor, 1=Çalışıyor, 2=Onaylandı. */
+  test_state?: number;
+  test_state_text?: string;
+  /** 1=Normal, 2=Grup, 3=Alt Parametre. */
+  test_type?: number;
+  test_type_text?: string;
+  [k: string]: unknown;
+}
+
+// ---------- diets ----------
+
+/** One entry in the patient's diet lists (`list.foundDiets[]`). */
+export interface DietListItem {
+  /** Feeds `diets.detail`. */
+  list_id: number | string;
+  diet_date?: string;
+  protocol_no?: string;
+  patient_name?: string;
+  patient_surname?: string;
+  doctor_company_name?: string;
+  doctor_name?: string;
+  doctor_surname?: string;
+  doctor_title?: string;
+  doctor_branch_name?: string;
+  doctor_image?: string;
+  [k: string]: unknown;
+}

@@ -73,6 +73,8 @@ await client.appointments.reserveInterview({
 | `client.measures`     | `addList`, `add`, `update`, `delete`, `last`, `list`, `graph`, `partnerHealthInformation` |
 | `client.skin`         | `analyze` |
 | `client.meals`        | `analyze` |
+| `client.laboratory`   | `results`, `resultDetail`, `catalog`, `catalogDetail`, `order` |
+| `client.diets`        | `list`, `detail` |
 
 ## Authentication & tokens
 

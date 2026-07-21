@@ -3,7 +3,9 @@ import { HttpClient, type AuthMode, type RequestSpec } from "./http";
 import type { Lang } from "./types";
 import { AppointmentsResource } from "./resources/appointments";
 import { AuthResource } from "./resources/auth";
+import { DietsResource } from "./resources/diets";
 import { DoctorsResource } from "./resources/doctors";
+import { LaboratoryResource } from "./resources/laboratory";
 import { MealsResource } from "./resources/meals";
 import { MeasuresResource } from "./resources/measures";
 import { PaymentsResource } from "./resources/payments";
@@ -37,6 +39,10 @@ export class BulutklinikClient {
   readonly skin: SkinResource;
   /** AI meal-photo calorie/nutrition estimation. */
   readonly meals: MealsResource;
+  /** Lab results, orderable test catalog, and test pre-ordering. */
+  readonly laboratory: LaboratoryResource;
+  /** The patient's diet lists (a dietitian's "Diyet Listesi"). */
+  readonly diets: DietsResource;
   /** The active token store (also accepts a custom one via options). */
   readonly tokenStore: TokenStore;
 
@@ -55,6 +61,8 @@ export class BulutklinikClient {
     this.measures = new MeasuresResource(this.http);
     this.skin = new SkinResource(this.http);
     this.meals = new MealsResource(this.http);
+    this.laboratory = new LaboratoryResource(this.http);
+    this.diets = new DietsResource(this.http);
   }
 
   /**
