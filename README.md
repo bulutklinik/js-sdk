@@ -65,7 +65,7 @@ await client.appointments.reserveInterview({
 
 | Group               | Methods |
 |---------------------|---------|
-| `client.auth`         | `connect`, `connectWithTwoFactor`, `register`, `refresh`, `disconnect` |
+| `client.auth`         | `connect`, `connectWithTwoFactor`, `verifyRegistration`, `register`, `refresh`, `disconnect` |
 | `client.doctors`      | `branches`, `locations`, `quickSearch`, `search`, `detail` |
 | `client.slots`        | `schedule` |
 | `client.appointments` | `reserveInterview`, `addPhysical`, `cancel` |

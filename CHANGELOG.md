@@ -4,6 +4,17 @@ All notable changes to `@bulutklinik/sdk` are documented here. The format is bas
 on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0]
+
+### Added
+
+- `client.auth.verifyRegistration(input)` — step 1 of registration
+  (`POST /patients/verifyAddingNewPatient`): sends the SMS/e-mail verification code
+  and returns the encrypted `response` blob to pass to `register`. Uses the
+  configured **partner** token (the endpoint is behind `auth:apiusers`, not public)
+  and requires a browser-minted CAPTCHA token (`recaptchaV2` or `captcha`).
+- Types: `VerifyRegistrationInput`, `VerifyRegistrationResult`.
+
 ## [0.4.0]
 
 ### Added

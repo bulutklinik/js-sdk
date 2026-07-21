@@ -36,6 +36,37 @@ export interface TwoFactorInput {
   response: string;
 }
 
+/**
+ * Input for the registration verify step (`auth.verifyRegistration`).
+ * The endpoint requires a CAPTCHA token (`recaptchaV2` or `captcha`) minted by a
+ * browser/human, and is authorized with the configured partner token.
+ */
+export interface VerifyRegistrationInput {
+  name: string;
+  surname: string;
+  /** Must start with `+` and country code, e.g. `+90 555 111 22 33`. */
+  phoneNumber: string;
+  /** Country dial code only, e.g. `+90` (matches `^\+\d{1,3}$`). */
+  phoneCode: string;
+  email: string;
+  password: string;
+  acceptUserAgreement?: 0 | 1;
+  /** reCAPTCHA v2 token → sent as `g-recaptcha-response-v2`. Provide this or `captcha`. */
+  recaptchaV2?: string;
+  /** Alternative CAPTCHA token → sent as `captcha`. Provide this or `recaptchaV2`. */
+  captcha?: string;
+  /** Optional structured agreement approvals, passed through verbatim. */
+  userAgreements?: unknown[];
+}
+
+export interface VerifyRegistrationResult {
+  /** Opaque encrypted blob to pass to `register` as `response`. */
+  response: string;
+  /** How the code was delivered. */
+  confirmationType: "sms" | "email";
+  [k: string]: unknown;
+}
+
 export interface RegisterInput {
   name: string;
   surname: string;
@@ -45,7 +76,7 @@ export interface RegisterInput {
   phoneNumber: string;
   password: string;
   smsVerificationCode: string;
-  /** Encrypted blob from the prior SMS-verification step. */
+  /** Encrypted blob from the prior verify step (`verifyRegistration`). */
   response: string;
   acceptUserAgreement?: 0 | 1;
   clientId?: string;

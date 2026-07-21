@@ -5,6 +5,8 @@ import type {
   LoginResult,
   RegisterInput,
   TwoFactorInput,
+  VerifyRegistrationInput,
+  VerifyRegistrationResult,
 } from "../models";
 
 /** Login, 2FA, token refresh, registration and logout. */
@@ -53,6 +55,35 @@ export class AuthResource {
       body: { smsVerificationCode: input.smsVerificationCode, response: input.response },
     });
     await this.storeTokens(data);
+  }
+
+  /**
+   * Step 1 of registration: send the SMS/e-mail verification code and get the
+   * encrypted `response` blob back. Uses the configured **partner** token (the
+   * endpoint is behind `auth:apiusers`, not public). A CAPTCHA token
+   * (`recaptchaV2` or `captcha`), minted by a browser/human, is required.
+   * Feed the returned `response` (and the code the user receives) into {@link register}.
+   */
+  verifyRegistration(input: VerifyRegistrationInput): Promise<VerifyRegistrationResult> {
+    const body: Record<string, unknown> = {
+      name: input.name,
+      surname: input.surname,
+      phoneNumber: input.phoneNumber,
+      phone_code: input.phoneCode,
+      email: input.email,
+      password: input.password,
+      passwordAgain: input.password,
+      acceptUserAgreement: input.acceptUserAgreement ?? 1,
+    };
+    if (input.recaptchaV2 !== undefined) body["g-recaptcha-response-v2"] = input.recaptchaV2;
+    if (input.captcha !== undefined) body.captcha = input.captcha;
+    if (input.userAgreements !== undefined) body.userAgreements = input.userAgreements;
+    return this.http.request<VerifyRegistrationResult>({
+      method: "POST",
+      path: "/patients/verifyAddingNewPatient",
+      auth: "partner",
+      body,
+    });
   }
 
   /** Register a new patient (afterRegister auto-login). Stores tokens on success. */
