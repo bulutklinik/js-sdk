@@ -4,6 +4,27 @@ All notable changes to `@bulutklinik/sdk` are documented here. The format is bas
 on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0]
+
+### Added
+
+- `client.auth.confirmRegistrationEmail(input)` — the **required** e-mail-branch middle
+  step of registration (`POST /patients/emailConfirmationRegister`). A headerless SDK
+  caller always gets `confirmationType: "email"` from `verifyRegistration`; confirm the
+  e-mailed code here to receive the SMS blob that `register` consumes (without it,
+  `register` returns 501).
+- Social sign-up: `client.auth.verifyRegistrationSocial(input)` +
+  `client.auth.registerSocial(input)` (both public; `registerSocial` does not
+  auto-login — call `connect({ loginMode: "social" })` after).
+- Password reset: `client.auth.forgotPassword(input)` + `client.auth.resetPassword(input)`.
+- `client.appointments.list(page?)` (`GET /patients/userAppointments`) — the source of the
+  `event_id` that `cancel` requires — and `client.appointments.reservations()`.
+- New `client.addresses` group (`list`/`add`/`update`/`delete`) over `/patients/userAddress`,
+  required by `laboratory.order` (which needs an `addressId`).
+- Types: `ConfirmRegistrationEmailInput`, `VerifyRegistrationSocialInput`,
+  `RegisterSocialInput`, `ForgotPasswordInput`, `ResetPasswordInput`, `ChallengeResult`,
+  `AddressInput`, `AddressUpdateInput`.
+
 ## [0.5.0]
 
 ### Added

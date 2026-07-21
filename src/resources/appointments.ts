@@ -37,4 +37,25 @@ export class AppointmentsResource {
       auth: "bearer",
     });
   }
+
+  /**
+   * The patient's appointments — `{ foundAppointmentsCount, foundAppointments }`.
+   * Each item's `event_id` is the id to pass to `cancel`; rows with `event_id`
+   * `"0"` are paid-order/refund entries and are not cancellable. Server paging is
+   * disabled, so page 1 (the default) returns the full list.
+   */
+  list(page?: number | string): Promise<unknown> {
+    const path =
+      page !== undefined ? `/patients/userAppointments/${page}` : "/patients/userAppointments";
+    return this.http.request<unknown>({ method: "GET", path, auth: "bearer" });
+  }
+
+  /** The patient's active online-slot reservation holds (with `minute_diff`/`second_diff` countdown). */
+  reservations(): Promise<unknown> {
+    return this.http.request<unknown>({
+      method: "GET",
+      path: "/patients/userReservations",
+      auth: "bearer",
+    });
+  }
 }

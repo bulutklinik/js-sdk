@@ -1,6 +1,7 @@
 import { resolveConfig, type ClientOptions } from "./config";
 import { HttpClient, type AuthMode, type RequestSpec } from "./http";
 import type { Lang } from "./types";
+import { AddressesResource } from "./resources/addresses";
 import { AppointmentsResource } from "./resources/appointments";
 import { AuthResource } from "./resources/auth";
 import { DietsResource } from "./resources/diets";
@@ -43,6 +44,8 @@ export class BulutklinikClient {
   readonly laboratory: LaboratoryResource;
   /** The patient's diet lists (a dietitian's "Diyet Listesi"). */
   readonly diets: DietsResource;
+  /** The patient's saved addresses (required by `laboratory.order`). */
+  readonly addresses: AddressesResource;
   /** The active token store (also accepts a custom one via options). */
   readonly tokenStore: TokenStore;
 
@@ -63,6 +66,7 @@ export class BulutklinikClient {
     this.meals = new MealsResource(this.http);
     this.laboratory = new LaboratoryResource(this.http);
     this.diets = new DietsResource(this.http);
+    this.addresses = new AddressesResource(this.http);
   }
 
   /**

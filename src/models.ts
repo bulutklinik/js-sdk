@@ -83,6 +83,95 @@ export interface RegisterInput {
   clientSecret?: string;
 }
 
+/** A registration/reset challenge that returns an opaque `response` blob to forward. */
+export interface ChallengeResult {
+  response: string;
+  [k: string]: unknown;
+}
+
+export interface ConfirmRegistrationEmailInput {
+  /** The code the user received by e-mail. */
+  verificationCode: string;
+  /** The `response` blob from `verifyRegistration` (when `confirmationType` was `"email"`). */
+  response: string;
+  /** Optional structured agreement approvals (not carried in the e-mail token). */
+  userAgreements?: unknown[];
+}
+
+export interface VerifyRegistrationSocialInput {
+  name: string;
+  surname: string;
+  /** Must start with `+` and a country code; must not already be registered. */
+  phoneNumber: string;
+  password: string;
+  /** Social provider identifier (e.g. `"google"`, `"apple"`). */
+  socialType: string;
+  /** The social provider key/token identifying the user. */
+  key: string;
+  email?: string;
+  acceptUserAgreement?: 0 | 1;
+  userAgreements?: unknown[];
+}
+
+export interface RegisterSocialInput {
+  smsVerificationCode: string;
+  /** The `response` blob from `verifyRegistrationSocial`. */
+  response: string;
+  userAgreements?: unknown[];
+}
+
+export interface ForgotPasswordInput {
+  /** Must start with `+` and a country code; must be a registered number. */
+  phoneNumber: string;
+  /** Optional `YYYY-MM-DD`; required by installs that verify identity. */
+  birthdate?: string;
+  /** reCAPTCHA v2 token → `g-recaptcha-response-v2`. Provide this or `captcha` (required outside local env). */
+  recaptchaV2?: string;
+  /** Alternative CAPTCHA token → `captcha`. Provide this or `recaptchaV2`. */
+  captcha?: string;
+}
+
+export interface ResetPasswordInput {
+  /** The SMS confirm code the user received. */
+  smsConfirmCode: string;
+  /** The `response` blob from `forgotPassword`. */
+  response: string;
+  /** The new password. */
+  password: string;
+}
+
+// ---------- addresses ----------
+
+export interface AddressInput {
+  title: string;
+  description?: string;
+  /** City id — the `location_id` from `doctors.locations()`. */
+  cityId: number | string;
+  /** District id — from `GET /getConfig` (`cities[].districts[]`), reachable via `client.request`. */
+  districtId: number | string;
+  /** Free-text address line. */
+  address: string;
+  locationLat: string;
+  locationLng: string;
+  /** `1` makes this the default address (first address is always default). */
+  isDefault?: 0 | 1;
+}
+
+export interface AddressUpdateInput {
+  /** The address `id` returned by `addresses.list()` / `addresses.add()`. */
+  id: number | string;
+  /** Fields are optional: send `{ id, isDefault: 1 }` to only flip the default flag,
+   *  or the full set to edit the address. */
+  title?: string;
+  description?: string;
+  cityId?: number | string;
+  districtId?: number | string;
+  address?: string;
+  locationLat?: string;
+  locationLng?: string;
+  isDefault?: 0 | 1;
+}
+
 // ---------- doctors ----------
 
 export type DoctorListType = "interview" | "appointment";

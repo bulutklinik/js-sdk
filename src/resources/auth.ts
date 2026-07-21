@@ -1,12 +1,18 @@
 import type { HttpClient } from "../http";
 import type {
+  ChallengeResult,
+  ConfirmRegistrationEmailInput,
   ConnectInput,
+  ForgotPasswordInput,
   LoginData,
   LoginResult,
   RegisterInput,
+  RegisterSocialInput,
+  ResetPasswordInput,
   TwoFactorInput,
   VerifyRegistrationInput,
   VerifyRegistrationResult,
+  VerifyRegistrationSocialInput,
 } from "../models";
 
 /** Login, 2FA, token refresh, registration and logout. */
@@ -86,6 +92,27 @@ export class AuthResource {
     });
   }
 
+  /**
+   * Step 2 of e-mail-branch registration. When `verifyRegistration` returns
+   * `confirmationType: "email"`, the user gets the code by e-mail; confirm it here
+   * with the same `response` blob. The server verifies the e-mail code, sends an
+   * **SMS** code, and returns a fresh `response` blob — feed that + the SMS code
+   * into `register`. Public; no token needed (the profile is carried in the blob).
+   */
+  confirmRegistrationEmail(input: ConfirmRegistrationEmailInput): Promise<VerifyRegistrationResult> {
+    const body: Record<string, unknown> = {
+      verificationCode: input.verificationCode,
+      response: input.response,
+    };
+    if (input.userAgreements !== undefined) body.userAgreements = input.userAgreements;
+    return this.http.request<VerifyRegistrationResult>({
+      method: "POST",
+      path: "/patients/emailConfirmationRegister",
+      auth: "public",
+      body,
+    });
+  }
+
   /** Register a new patient (afterRegister auto-login). Stores tokens on success. */
   async register(input: RegisterInput): Promise<void> {
     const data = await this.http.request<LoginData>({
@@ -106,6 +133,89 @@ export class AuthResource {
       },
     });
     await this.storeTokens(data);
+  }
+
+  /**
+   * Step 1 of social sign-up: register a patient who authenticates via a social
+   * provider. Sends the SMS verification code and returns a `response` blob.
+   * Public — no CAPTCHA and no partner token (unlike `verifyRegistration`).
+   * Feed the returned `response` + the SMS code into `registerSocial`.
+   */
+  verifyRegistrationSocial(input: VerifyRegistrationSocialInput): Promise<ChallengeResult> {
+    const body: Record<string, unknown> = {
+      name: input.name,
+      surname: input.surname,
+      phoneNumber: input.phoneNumber,
+      password: input.password,
+      passwordAgain: input.password,
+      socialType: input.socialType,
+      key: input.key,
+      acceptUserAgreement: input.acceptUserAgreement ?? 1,
+    };
+    if (input.email !== undefined) body.email = input.email;
+    if (input.userAgreements !== undefined) body.userAgreements = input.userAgreements;
+    return this.http.request<ChallengeResult>({
+      method: "POST",
+      path: "/patients/verifyAddingNewPatientSocial",
+      auth: "public",
+      body,
+    });
+  }
+
+  /**
+   * Step 2 of social sign-up: create the social patient. Unlike `register`, this
+   * does **not** auto-login or store tokens — afterwards call
+   * `connect({ loginMode: "social" })` to obtain tokens. Public.
+   */
+  async registerSocial(input: RegisterSocialInput): Promise<void> {
+    const body: Record<string, unknown> = {
+      smsVerificationCode: input.smsVerificationCode,
+      response: input.response,
+    };
+    if (input.userAgreements !== undefined) body.userAgreements = input.userAgreements;
+    await this.http.request({
+      method: "POST",
+      path: "/patients/addNewPatientWithSocial",
+      auth: "public",
+      body,
+    });
+  }
+
+  /**
+   * Step 1 of password reset: send the SMS confirm code to a registered phone and
+   * return a `response` blob. Public but a CAPTCHA token (`recaptchaV2` or
+   * `captcha`) is required outside the local environment. Feed the returned
+   * `response` + the SMS code into `resetPassword`.
+   */
+  forgotPassword(input: ForgotPasswordInput): Promise<ChallengeResult> {
+    const body: Record<string, unknown> = { phoneNumber: input.phoneNumber };
+    if (input.birthdate !== undefined) body.birthdate = input.birthdate;
+    if (input.recaptchaV2 !== undefined) body["g-recaptcha-response-v2"] = input.recaptchaV2;
+    if (input.captcha !== undefined) body.captcha = input.captcha;
+    return this.http.request<ChallengeResult>({
+      method: "POST",
+      path: "/patients/forgotPassword",
+      auth: "public",
+      body,
+    });
+  }
+
+  /**
+   * Step 2 of password reset: set the new password using the SMS confirm code and
+   * the `response` blob from `forgotPassword`. Public.
+   */
+  async resetPassword(input: ResetPasswordInput): Promise<void> {
+    await this.http.request({
+      method: "PUT",
+      path: "/patients/forgotPassword",
+      auth: "public",
+      body: {
+        smsConfirmCode: input.smsConfirmCode,
+        response: input.response,
+        password: input.password,
+        passwordAgain: input.password,
+      },
+    });
   }
 
   /** Manually refresh the access token using the stored refresh token. */

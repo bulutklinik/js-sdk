@@ -32,5 +32,6 @@ export { SkinResource } from "./resources/skin";
 export { MealsResource } from "./resources/meals";
 export { LaboratoryResource } from "./resources/laboratory";
 export { DietsResource } from "./resources/diets";
+export { AddressesResource } from "./resources/addresses";
 
 export * from "./models";
