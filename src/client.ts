@@ -9,6 +9,7 @@ import { DoctorsResource } from "./resources/doctors";
 import { LaboratoryResource } from "./resources/laboratory";
 import { MealsResource } from "./resources/meals";
 import { MeasuresResource } from "./resources/measures";
+import { PartnerNamespace } from "./resources/partner";
 import { PaymentsResource } from "./resources/payments";
 import { SkinResource } from "./resources/skin";
 import { SlotsResource } from "./resources/slots";
@@ -46,6 +47,12 @@ export class BulutklinikClient {
   readonly diets: DietsResource;
   /** The patient's saved addresses (required by `laboratory.order`). */
   readonly addresses: AddressesResource;
+  /**
+   * The company-scoped partner surface (`/outher`). Uses the configured
+   * `partnerToken` instead of a patient login; data is limited to your own
+   * company and the patient is named inline on each call.
+   */
+  readonly partner: PartnerNamespace;
   /** The active token store (also accepts a custom one via options). */
   readonly tokenStore: TokenStore;
 
@@ -67,6 +74,7 @@ export class BulutklinikClient {
     this.laboratory = new LaboratoryResource(this.http);
     this.diets = new DietsResource(this.http);
     this.addresses = new AddressesResource(this.http);
+    this.partner = new PartnerNamespace(this.http);
   }
 
   /**

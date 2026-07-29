@@ -500,3 +500,109 @@ export interface DietListItem {
   doctor_image?: string;
   [k: string]: unknown;
 }
+
+// ---------- partner (/outher — company-scoped surface) ----------
+
+/**
+ * Identifies an existing patient **inside the partner's own company**.
+ *
+ * Used by every partner *read*. The server never creates a patient on this path
+ * and never looks the reference up globally, so a patient the partner has never
+ * treated simply resolves to "not found".
+ *
+ * `identityNumber` is primary. `phoneNumber` is a fallback and is only accepted
+ * when it matches exactly one patient — the column is not unique (family members
+ * share numbers), and the server fails closed rather than guessing.
+ */
+export interface PatientRef {
+  identityNumber?: string;
+  phoneNumber?: string;
+}
+
+/**
+ * Identifies a patient for a partner *write*. If no matching patient exists in
+ * the partner's company, the server creates one, so the descriptive fields are
+ * required here while they are absent from {@link PatientRef}.
+ */
+export interface PartnerPatient {
+  name: string;
+  surname: string;
+  phoneNumber: string;
+  identityNumber?: string;
+  email?: string;
+  /** `Y-m-d`. */
+  birthdate?: string;
+  /** ISO country code present in `bas_com_countries.code`. */
+  nationality?: string;
+}
+
+/** The `user` object accepted by the partner booking endpoints. */
+export interface PartnerBookingUser extends PartnerPatient {
+  price?: number;
+}
+
+export interface PartnerReserveInput {
+  slotId: number | string;
+  doctorId: number | string;
+  user: PartnerBookingUser;
+}
+
+export interface PartnerInstantReserveInput {
+  user: PartnerBookingUser;
+}
+
+/** Turns a reservation into an appointment. Both fields come from the reservation response. */
+export interface PartnerCreateAppointmentInput {
+  hash: string;
+  outherProcessId: number | string;
+}
+
+export interface PartnerAppointmentWithoutSlotInput {
+  doctorId: number | string;
+  /** `Y-m-d H:i`, today or later. */
+  startDate: string;
+  /** `Y-m-d H:i`, after `startDate`. */
+  finishDate: string;
+  isOutherDoctor?: 0 | 1;
+  user: PartnerBookingUser;
+}
+
+/**
+ * Addresses one appointment either by its process (`hash` + `outherProcessId`)
+ * or by its coordinates (`doctorId` + `appointmentDate` + `isOutherDoctor`).
+ * Supply one pair or the other.
+ */
+export interface PartnerAppointmentLookupInput {
+  hash?: string;
+  outherProcessId?: number | string;
+  doctorId?: number | string;
+  /** `Y-m-d H:i`. */
+  appointmentDate?: string;
+  isOutherDoctor?: 0 | 1;
+}
+
+export interface PartnerAppointmentListInput {
+  phoneNumber: string;
+  page?: number | string;
+  type?: "normal" | "instant";
+}
+
+export interface PartnerCheckDoctorInput {
+  doctorId: number | string;
+  isOutherDoctor: 0 | 1;
+}
+
+export interface PartnerSlotScheduleInput {
+  doctorId: number | string;
+  /** `Y-m-d`. Omit and send `scheduleStep` + `schedulePage` instead. */
+  scheduleDate?: string;
+  scheduleStep?: number;
+  schedulePage?: number;
+}
+
+/**
+ * A laboratory result id exactly as returned by `laboratory.results`.
+ * A plain number is an HBYS lab request; a `-lab` suffix marks a TmcLab order
+ * group. Pass it back verbatim — the SDK does not need to tell them apart.
+ */
+export type PartnerLabResultId = string;

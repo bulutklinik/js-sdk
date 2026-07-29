@@ -34,4 +34,14 @@ export { LaboratoryResource } from "./resources/laboratory";
 export { DietsResource } from "./resources/diets";
 export { AddressesResource } from "./resources/addresses";
 
+export {
+  PartnerNamespace,
+  PartnerAppointmentsResource,
+  PartnerDietsResource,
+  PartnerDoctorsResource,
+  PartnerLaboratoryResource,
+  PartnerMeasuresResource,
+  PartnerSlotsResource,
+} from "./resources/partner";
+
 export * from "./models";
