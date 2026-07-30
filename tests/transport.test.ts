@@ -33,13 +33,22 @@ describe("transport", () => {
       jsonResponse({ resultType: 0, data: { foundDoctorsCount: 0, foundDoctors: [] } }),
     );
 
-    const res = await c.doctors.search({ currentPage: 1 });
+    const res = await c.doctors.search({
+      searchParams: { withFreeText: "kardiyoloji" },
+      currentPage: 1,
+    });
 
     expect(res).toEqual({ foundDoctorsCount: 0, foundDoctors: [] });
     expect(calls[0]!.url).toBe(`${BASE}/outher/search`);
     expect(authHeader(calls[0]!)).toBe("Bearer PT");
     expect(new Headers(calls[0]!.init.headers).get("lang")).toBe("tr");
-    expect(bodyOf(calls[0]!)).toEqual({ searchParams: {}, orderParams: [], currentPage: 1 });
+    // `searchParams` is forwarded as given: the server rejects an empty one with
+    // a validation error, so the SDK must not substitute a default.
+    expect(bodyOf(calls[0]!)).toEqual({
+      searchParams: { withFreeText: "kardiyoloji" },
+      orderParams: [],
+      currentPage: 1,
+    });
   });
 
   it("targets v4 when asked, without changing any path", async () => {

@@ -12,14 +12,18 @@ import type { Branch, DoctorDetail, DoctorSearchInput, DoctorSearchResult, Locat
 export class DoctorsResource {
   constructor(private readonly http: HttpClient) {}
 
-  /** Filtered doctor search. */
+  /**
+   * Filtered doctor search. `searchParams` must carry at least one key — the
+   * server rejects an empty one with a validation error rather than treating it
+   * as "no filter".
+   */
   search(input: DoctorSearchInput): Promise<DoctorSearchResult> {
     return this.http.request<DoctorSearchResult>({
       method: "POST",
       path: "/outher/search",
       auth: "partner",
       body: {
-        searchParams: input.searchParams ?? {},
+        searchParams: input.searchParams,
         orderParams: input.orderParams ?? [],
         currentPage: input.currentPage,
       },

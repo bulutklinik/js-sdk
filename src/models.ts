@@ -64,7 +64,12 @@ export interface SearchParams {
 export type OrderParam = "name" | "order" | "slot";
 
 export interface DoctorSearchInput {
-  searchParams?: SearchParams;
+  /**
+   * At least one key is required. The server rule is `required|array`, and PHP's
+   * `required` rejects an empty array — `{}` is a guaranteed 422, not an
+   * unfiltered search.
+   */
+  searchParams: SearchParams;
   orderParams?: OrderParam[];
   /** >= 1. */
   currentPage: number;
