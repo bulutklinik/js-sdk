@@ -2,23 +2,24 @@ import { describe, expect, it } from "vitest";
 import { MemoryTokenStore } from "../src/index";
 
 describe("MemoryTokenStore", () => {
-  it("seeds, sets and clears tokens", () => {
-    const store = new MemoryTokenStore({ accessToken: "a", refreshToken: "r" });
-    expect(store.getAccessToken()).toBe("a");
-    expect(store.getRefreshToken()).toBe("r");
+  it("seeds, sets and clears the partner token", () => {
+    const store = new MemoryTokenStore("a");
+    expect(store.getToken()).toBe("a");
 
-    store.setTokens("a2", "r2");
-    expect(store.getAccessToken()).toBe("a2");
-    expect(store.getRefreshToken()).toBe("r2");
+    store.setToken("b");
+    expect(store.getToken()).toBe("b");
 
     store.clear();
-    expect(store.getAccessToken()).toBeNull();
-    expect(store.getRefreshToken()).toBeNull();
+    expect(store.getToken()).toBeNull();
   });
 
   it("defaults to null when unseeded", () => {
-    const store = new MemoryTokenStore();
-    expect(store.getAccessToken()).toBeNull();
-    expect(store.getRefreshToken()).toBeNull();
+    expect(new MemoryTokenStore().getToken()).toBeNull();
+  });
+
+  it("accepts an explicit null unset", () => {
+    const store = new MemoryTokenStore("a");
+    store.setToken(null);
+    expect(store.getToken()).toBeNull();
   });
 });

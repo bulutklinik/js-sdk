@@ -1,22 +1,36 @@
 import type { HttpClient } from "../http";
+import type { DietList, PatientRef } from "../models";
 
-/** The patient's diet lists (a dietitian's "Diyet Listesi"). */
+/**
+ * Diet lists recorded for a patient **inside your own company**.
+ * Lists written by other clinics are not visible here.
+ */
 export class DietsResource {
   constructor(private readonly http: HttpClient) {}
 
-  /** The patient's diet lists. `page` defaults to 1 server-side (page size fixed to 10). */
-  list(page?: number | string): Promise<unknown> {
-    const path =
-      page !== undefined ? `/patients/dietLists/${page}` : "/patients/dietLists";
-    return this.http.request<unknown>({ method: "GET", path, auth: "bearer" });
+  /**
+   * Paginated diet lists — `{ foundDietsCount, foundDiets }`. Page size is fixed
+   * to 20 server-side.
+   */
+  list(patient: PatientRef, page?: number | string): Promise<DietList> {
+    return this.http.request<DietList>({
+      method: "POST",
+      path: "/outher/dietLists",
+      auth: "partner",
+      body: { patient, currentPage: page },
+    });
   }
 
-  /** One diet list. `listId` is a `list_id` from a `list` item. */
-  detail(listId: number | string): Promise<unknown> {
+  /**
+   * Meal breakdown of one diet list. `listId` comes from `list`; one that is not
+   * this patient's fails with the same generic error as "not found".
+   */
+  detail(patient: PatientRef, listId: number | string): Promise<unknown> {
     return this.http.request<unknown>({
-      method: "GET",
-      path: `/patients/diet/${listId}`,
-      auth: "bearer",
+      method: "POST",
+      path: "/outher/diet",
+      auth: "partner",
+      body: { patient, listId },
     });
   }
 }

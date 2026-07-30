@@ -1,57 +1,60 @@
 import type { HttpClient } from "../http";
-import type { LabOrderInput } from "../models";
+import type { LabResultId, PatientRef } from "../models";
 
-/** Patient laboratory results, the orderable test catalog, and test pre-ordering. */
+/**
+ * Laboratory catalogue and results.
+ *
+ * `catalog` / `catalogDetail` are global, static package definitions. `results` /
+ * `resultDetail` are scoped to your own company and merge two sources: the
+ * clinic's HBYS lab requests and TmcLab order groups. Results recorded by other
+ * clinics are not visible.
+ *
+ * Ordering a test is not available here — it creates a financial record.
+ */
 export class LaboratoryResource {
   constructor(private readonly http: HttpClient) {}
 
-  /** The patient's completed/in-progress lab results. `page` defaults to 1 server-side. */
-  results(page?: number | string): Promise<unknown> {
-    const path =
-      page !== undefined
-        ? `/patients/userLabTestList/${page}`
-        : "/patients/userLabTestList";
-    return this.http.request<unknown>({ method: "GET", path, auth: "bearer" });
-  }
-
-  /** One lab result. `testId` may be a plain id (`"123"`) or a `"<id>-lab"` TMC id. */
-  resultDetail(testId: number | string): Promise<unknown> {
-    return this.http.request<unknown>({
-      method: "GET",
-      path: `/patients/userLabTestDetail/${testId}`,
-      auth: "bearer",
-    });
-  }
-
-  /** The orderable test-group catalog. */
+  /** Orderable test packages. Static catalogue, no patient context. */
   catalog(): Promise<unknown> {
     return this.http.request<unknown>({
       method: "GET",
-      path: "/patients/allLaboratoryTests",
-      auth: "bearer",
+      path: "/outher/laboratoryCatalog",
+      auth: "partner",
     });
   }
 
-  /** One catalog test group. */
-  catalogDetail(id: number | string): Promise<unknown> {
+  /**
+   * One catalogue package. Prices are the plain list prices — the patient-side
+   * discount pass does not apply here.
+   */
+  catalogDetail(testId: number | string): Promise<unknown> {
     return this.http.request<unknown>({
       method: "GET",
-      path: `/patients/laboratoryTestDetail/${id}`,
-      auth: "bearer",
+      path: `/outher/laboratoryCatalog/${testId}`,
+      auth: "partner",
     });
   }
 
-  /** Pre-order a lab test. Success → `{ preOrderId }`. */
-  order(input: LabOrderInput): Promise<unknown> {
+  /**
+   * Paginated results — `{ foundTestsCount, foundTests }`. Each item's `id` is
+   * accepted verbatim by `resultDetail` (a `-lab` suffix marks a TmcLab group).
+   */
+  results(patient: PatientRef, page?: number | string): Promise<unknown> {
     return this.http.request<unknown>({
       method: "POST",
-      path: "/patients/addNewLaboratoryTest",
-      auth: "bearer",
-      body: {
-        testId: input.testId,
-        addressId: input.addressId,
-        laboratoryId: input.laboratoryId,
-      },
+      path: "/outher/laboratoryResults",
+      auth: "partner",
+      body: { patient, currentPage: page },
+    });
+  }
+
+  /** One result. Pass the `id` from `results` unchanged, suffix and all. */
+  resultDetail(patient: PatientRef, testId: LabResultId | number): Promise<unknown> {
+    return this.http.request<unknown>({
+      method: "POST",
+      path: "/outher/laboratoryResult",
+      auth: "partner",
+      body: { patient, testId: String(testId) },
     });
   }
 }

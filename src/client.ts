@@ -1,59 +1,52 @@
 import { resolveConfig, type ClientOptions } from "./config";
 import { HttpClient, type AuthMode, type RequestSpec } from "./http";
 import type { Lang } from "./types";
-import { AddressesResource } from "./resources/addresses";
 import { AppointmentsResource } from "./resources/appointments";
-import { AuthResource } from "./resources/auth";
 import { DietsResource } from "./resources/diets";
 import { DoctorsResource } from "./resources/doctors";
 import { LaboratoryResource } from "./resources/laboratory";
-import { MealsResource } from "./resources/meals";
 import { MeasuresResource } from "./resources/measures";
-import { PartnerNamespace } from "./resources/partner";
-import { PaymentsResource } from "./resources/payments";
-import { SkinResource } from "./resources/skin";
 import { SlotsResource } from "./resources/slots";
 import type { TokenStore } from "./token-store";
 
 /**
- * The Bulutklinik API client. Construct once and reuse; service groups are
- * exposed as properties.
+ * The Bulutklinik partner API client. Construct once and reuse; service groups
+ * are exposed as properties.
+ *
+ * Every call runs on the company-scoped `/outher` surface with the partner token
+ * issued for your integration: you see the patients of **your own company**, and
+ * the patient is named inline on each request — there is no login and no
+ * session.
  *
  * @example
  * ```ts
  * const client = new BulutklinikClient({
  *   environment: "test",
- *   clientId: "…",
- *   clientSecret: "…",
+ *   partnerToken: process.env.BULUTKLINIK_PARTNER_TOKEN,
  * });
- * await client.auth.connect({ apiUserName: "…", apiUserPassword: "…", loginMode: "email" });
- * const result = await client.doctors.quickSearch({ searchText: "kardiyo" });
+ *
+ * const branches = await client.doctors.branches();
+ * const slots = await client.slots.schedule({ doctorId: 8282, scheduleDate: "2026-08-01" });
+ * const measures = await client.measures.last({ identityNumber: "12345678901" });
  * ```
  */
 export class BulutklinikClient {
-  readonly auth: AuthResource;
+  /** Doctor discovery: search, branches, detail, city list. */
   readonly doctors: DoctorsResource;
+  /** Doctor availability (materialized slots). */
   readonly slots: SlotsResource;
+  /** Reserve, confirm, free-form booking, cancel, list, lookup. */
   readonly appointments: AppointmentsResource;
-  readonly payments: PaymentsResource;
+  /** Health measurements for a named patient, read and write. */
   readonly measures: MeasuresResource;
-  /** "Cildimde Neyim Var" — AI skin-lesion analysis. */
-  readonly skin: SkinResource;
-  /** AI meal-photo calorie/nutrition estimation. */
-  readonly meals: MealsResource;
-  /** Lab results, orderable test catalog, and test pre-ordering. */
+  /** Lab results for a named patient + the orderable test catalog. */
   readonly laboratory: LaboratoryResource;
-  /** The patient's diet lists (a dietitian's "Diyet Listesi"). */
+  /** Diet lists written by a dietitian, for a named patient. */
   readonly diets: DietsResource;
-  /** The patient's saved addresses (required by `laboratory.order`). */
-  readonly addresses: AddressesResource;
   /**
-   * The company-scoped partner surface (`/outher`). Uses the configured
-   * `partnerToken` instead of a patient login; data is limited to your own
-   * company and the patient is named inline on each call.
+   * The active token store. Write a newly issued partner token here to rotate
+   * the credential without rebuilding the client.
    */
-  readonly partner: PartnerNamespace;
-  /** The active token store (also accepts a custom one via options). */
   readonly tokenStore: TokenStore;
 
   private readonly http: HttpClient;
@@ -63,35 +56,31 @@ export class BulutklinikClient {
     this.http = new HttpClient(config);
     this.tokenStore = config.tokenStore;
 
-    this.auth = new AuthResource(this.http);
     this.doctors = new DoctorsResource(this.http);
     this.slots = new SlotsResource(this.http);
     this.appointments = new AppointmentsResource(this.http);
-    this.payments = new PaymentsResource(this.http);
     this.measures = new MeasuresResource(this.http);
-    this.skin = new SkinResource(this.http);
-    this.meals = new MealsResource(this.http);
     this.laboratory = new LaboratoryResource(this.http);
     this.diets = new DietsResource(this.http);
-    this.addresses = new AddressesResource(this.http);
-    this.partner = new PartnerNamespace(this.http);
   }
 
   /**
    * Escape hatch: call any Bulutklinik API endpoint that does not yet have a
    * typed resource method. The request still goes through the shared transport,
-   * so default headers, the chosen `auth` mode (`bearer` by default), silent
-   * token refresh + retry, envelope unwrapping and typed errors all apply.
-   * Returns the unwrapped `data` payload. Prefer a typed resource method when
-   * one exists.
+   * so default headers, the chosen `auth` mode (`partner` by default), envelope
+   * unwrapping and typed errors all apply. Returns the unwrapped `data` payload.
+   * Prefer a typed resource method when one exists.
    *
    * @example
    * ```ts
-   * const branches = await client.request({ method: "GET", path: "/patients/allBranches" });
-   * const created = await client.request({
-   *   method: "POST",
-   *   path: "/patients/someNewEndpoint",
-   *   body: { foo: "bar" },
+   * const branches = await client.request({ method: "GET", path: "/outher/branches" });
+   *
+   * // `public` reaches the handful of unauthenticated endpoints outside the
+   * // partner surface — e.g. the city/district catalogue.
+   * const config = await client.request({
+   *   method: "GET",
+   *   path: "/general/getConfig",
+   *   auth: "public",
    * });
    * ```
    */
@@ -102,6 +91,6 @@ export class BulutklinikClient {
     body?: unknown;
     lang?: Lang;
   }): Promise<T> {
-    return this.http.request<T>({ auth: "bearer", ...spec });
+    return this.http.request<T>({ auth: "partner", ...spec });
   }
 }

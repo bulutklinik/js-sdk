@@ -1,42 +1,35 @@
 import type { MaybePromise } from "./types";
 
 /**
- * Pluggable token persistence. The default is in-memory; provide a custom
- * implementation to persist tokens to a file, database or secure storage.
- * All methods may be synchronous or return a promise.
+ * Pluggable source for the partner token.
+ *
+ * The token is read on **every** request, so pointing this at a file, database
+ * or secret manager lets a long-running process pick up a newly issued token
+ * without being rebuilt. All methods may be synchronous or return a promise.
  */
 export interface TokenStore {
-  getAccessToken(): MaybePromise<string | null>;
-  getRefreshToken(): MaybePromise<string | null>;
-  setTokens(accessToken: string, refreshToken: string | null): MaybePromise<void>;
+  getToken(): MaybePromise<string | null>;
+  setToken(token: string | null): MaybePromise<void>;
   clear(): MaybePromise<void>;
 }
 
-/** In-memory token store (default). Tokens are lost when the process exits. */
+/** In-memory token store (default). The token is lost when the process exits. */
 export class MemoryTokenStore implements TokenStore {
-  #access: string | null;
-  #refresh: string | null;
+  #token: string | null;
 
-  constructor(seed?: { accessToken?: string | null; refreshToken?: string | null }) {
-    this.#access = seed?.accessToken ?? null;
-    this.#refresh = seed?.refreshToken ?? null;
+  constructor(token?: string | null) {
+    this.#token = token ?? null;
   }
 
-  getAccessToken(): string | null {
-    return this.#access;
+  getToken(): string | null {
+    return this.#token;
   }
 
-  getRefreshToken(): string | null {
-    return this.#refresh;
-  }
-
-  setTokens(accessToken: string, refreshToken: string | null): void {
-    this.#access = accessToken;
-    this.#refresh = refreshToken;
+  setToken(token: string | null): void {
+    this.#token = token;
   }
 
   clear(): void {
-    this.#access = null;
-    this.#refresh = null;
+    this.#token = null;
   }
 }

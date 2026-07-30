@@ -1,196 +1,48 @@
 /* Request and response shapes for the covered endpoints. Response types index
  * extra fields with `[k: string]: unknown` because the API may add fields. */
 
-// ---------- auth ----------
+// ---------- patient references ----------
 
-export type LoginMode = "email" | "identity" | "phone" | "user_id" | "social" | "afterRegister";
-
-export interface ConnectInput {
-  apiUserName: string;
-  /** Required except `social` / `afterRegister` modes. */
-  apiUserPassword?: string;
-  loginMode: LoginMode;
-  /** Defaults to the client's configured `clientId`. */
-  clientId?: string;
-  /** Defaults to the client's configured `clientSecret`. */
-  clientSecret?: string;
-  /** Some installs require this in `phone` mode. */
-  withPhoneNumber?: string;
-}
-
-export interface LoginData {
-  access_token?: string;
-  refresh_token?: string;
-  password_policy?: unknown;
-  /** Present (instead of tokens) when 2FA is required — an encrypted blob. */
-  response?: string;
-}
-
-export type LoginResult =
-  | { twoFactorRequired: false; passwordPolicy?: unknown }
-  | { twoFactorRequired: true; twoFactorResponse: string };
-
-export interface TwoFactorInput {
-  smsVerificationCode: string;
-  /** The encrypted blob from `connect`'s 2FA challenge (`twoFactorResponse`). */
-  response: string;
+/**
+ * Identifies an existing patient **inside your own company**.
+ *
+ * Used by every read. The server never creates a patient on this path and never
+ * looks the reference up globally, so a patient you have never treated simply
+ * resolves to "not found" — with the same message as "not yours", so the
+ * endpoint cannot be used to probe for TCKNs.
+ *
+ * `identityNumber` is primary. `phoneNumber` is a fallback and is only accepted
+ * when it matches exactly one patient — the column is not unique (family members
+ * share numbers), and the server fails closed rather than guessing.
+ */
+export interface PatientRef {
+  identityNumber?: string;
+  phoneNumber?: string;
 }
 
 /**
- * Input for the registration verify step (`auth.verifyRegistration`).
- * The endpoint requires a CAPTCHA token (`recaptchaV2` or `captcha`) minted by a
- * browser/human, and is authorized with the configured partner token.
+ * Identifies a patient for a write. If no matching patient exists in your
+ * company, the server creates one — which is why the descriptive fields are
+ * required here and absent from {@link PatientRef}.
  */
-export interface VerifyRegistrationInput {
+export interface PatientInput {
   name: string;
   surname: string;
-  /** Must start with `+` and country code, e.g. `+90 555 111 22 33`. */
   phoneNumber: string;
-  /** Country dial code only, e.g. `+90` (matches `^\+\d{1,3}$`). */
-  phoneCode: string;
-  email: string;
-  password: string;
-  acceptUserAgreement?: 0 | 1;
-  /** reCAPTCHA v2 token → sent as `g-recaptcha-response-v2`. Provide this or `captcha`. */
-  recaptchaV2?: string;
-  /** Alternative CAPTCHA token → sent as `captcha`. Provide this or `recaptchaV2`. */
-  captcha?: string;
-  /** Optional structured agreement approvals, passed through verbatim. */
-  userAgreements?: unknown[];
-}
-
-export interface VerifyRegistrationResult {
-  /** Opaque encrypted blob to pass to `register` as `response`. */
-  response: string;
-  /** How the code was delivered. */
-  confirmationType: "sms" | "email";
-  [k: string]: unknown;
-}
-
-export interface RegisterInput {
-  name: string;
-  surname: string;
-  /** Should equal `phoneNumber` (the `+CC` form) — used as the afterRegister username. */
-  apiUserName: string;
-  /** Must start with `+` and country code, e.g. `+90 555 111 22 33`. */
-  phoneNumber: string;
-  password: string;
-  smsVerificationCode: string;
-  /** Encrypted blob from the prior verify step (`verifyRegistration`). */
-  response: string;
-  acceptUserAgreement?: 0 | 1;
-  clientId?: string;
-  clientSecret?: string;
-}
-
-/** A registration/reset challenge that returns an opaque `response` blob to forward. */
-export interface ChallengeResult {
-  response: string;
-  [k: string]: unknown;
-}
-
-export interface ConfirmRegistrationEmailInput {
-  /** The code the user received by e-mail. */
-  verificationCode: string;
-  /** The `response` blob from `verifyRegistration` (when `confirmationType` was `"email"`). */
-  response: string;
-  /** Optional structured agreement approvals (not carried in the e-mail token). */
-  userAgreements?: unknown[];
-}
-
-export interface VerifyRegistrationSocialInput {
-  name: string;
-  surname: string;
-  /** Must start with `+` and a country code; must not already be registered. */
-  phoneNumber: string;
-  password: string;
-  /** Social provider identifier (e.g. `"google"`, `"apple"`). */
-  socialType: string;
-  /** The social provider key/token identifying the user. */
-  key: string;
+  identityNumber?: string;
   email?: string;
-  acceptUserAgreement?: 0 | 1;
-  userAgreements?: unknown[];
-}
-
-export interface RegisterSocialInput {
-  smsVerificationCode: string;
-  /** The `response` blob from `verifyRegistrationSocial`. */
-  response: string;
-  userAgreements?: unknown[];
-}
-
-export interface ForgotPasswordInput {
-  /** Must start with `+` and a country code; must be a registered number. */
-  phoneNumber: string;
-  /** Optional `YYYY-MM-DD`; required by installs that verify identity. */
+  /** `Y-m-d`. */
   birthdate?: string;
-  /** reCAPTCHA v2 token → `g-recaptcha-response-v2`. Provide this or `captcha` (required outside local env). */
-  recaptchaV2?: string;
-  /** Alternative CAPTCHA token → `captcha`. Provide this or `recaptchaV2`. */
-  captcha?: string;
+  /** ISO country code present in `bas_com_countries.code`. */
+  nationality?: string;
 }
 
-export interface ResetPasswordInput {
-  /** The SMS confirm code the user received. */
-  smsConfirmCode: string;
-  /** The `response` blob from `forgotPassword`. */
-  response: string;
-  /** The new password. */
-  password: string;
-}
-
-// ---------- addresses ----------
-
-export interface AddressInput {
-  title: string;
-  description?: string;
-  /** City id — the `location_id` from `doctors.locations()`. */
-  cityId: number | string;
-  /** District id — from `GET /getConfig` (`cities[].districts[]`), reachable via `client.request`. */
-  districtId: number | string;
-  /** Free-text address line. */
-  address: string;
-  locationLat: string;
-  locationLng: string;
-  /** `1` makes this the default address (first address is always default). */
-  isDefault?: 0 | 1;
-}
-
-export interface AddressUpdateInput {
-  /** The address `id` returned by `addresses.list()` / `addresses.add()`. */
-  id: number | string;
-  /** Fields are optional: send `{ id, isDefault: 1 }` to only flip the default flag,
-   *  or the full set to edit the address. */
-  title?: string;
-  description?: string;
-  cityId?: number | string;
-  districtId?: number | string;
-  address?: string;
-  locationLat?: string;
-  locationLng?: string;
-  isDefault?: 0 | 1;
+/** The `user` object accepted by the booking endpoints. */
+export interface BookingUser extends PatientInput {
+  price?: number;
 }
 
 // ---------- doctors ----------
-
-export type DoctorListType = "interview" | "appointment";
-
-export interface QuickSearchInput {
-  searchText: string;
-  listType?: DoctorListType | null;
-  location?: string | null;
-}
-
-export interface QuickSearchResult {
-  searchedBranches?: unknown[];
-  searchedDoctors?: unknown[];
-  searchedCompanies?: unknown[];
-  searchedGivenTreatments?: unknown[];
-  searchedBlogs?: unknown[];
-  queryText?: string;
-  [k: string]: unknown;
-}
 
 export interface SearchParams {
   withFreeText?: string;
@@ -208,17 +60,14 @@ export interface SearchParams {
   withNearestSlotDayRange?: number | null;
 }
 
-export type OrderParam = "name" | "point" | "slot" | "order";
-export type OtherParam = "isKizilay" | "isQuestionable" | "isInterviewable" | "isAppointmentable";
+/** Narrower than the patient surface — `point` is not accepted here. */
+export type OrderParam = "name" | "order" | "slot";
 
 export interface DoctorSearchInput {
   searchParams?: SearchParams;
   orderParams?: OrderParam[];
-  otherParams?: OtherParam[];
   /** >= 1. */
   currentPage: number;
-  /** 10–100. Default 20. */
-  perPageLimit?: number;
 }
 
 export interface DoctorSummary {
@@ -254,16 +103,19 @@ export interface Location {
 
 export type DoctorDetail = Record<string, unknown>;
 
+export interface CheckDoctorInput {
+  doctorId: number | string;
+  isOutherDoctor: 0 | 1;
+}
+
 // ---------- slots ----------
 
-export interface SchedulerInput {
+export interface SlotScheduleInput {
   doctorId: number | string;
-  /** `Y-m-d`, today..+21. When omitted, `scheduleStep` + `schedulePage` page the window. */
-  scheduleDate?: string | null;
-  scheduleStep?: number | string;
-  schedulePage?: number | string;
-  /** `interview` → online slots; anything else → physical. */
-  listType: DoctorListType;
+  /** `Y-m-d`, today..+21. Omit and send `scheduleStep` + `schedulePage` instead. */
+  scheduleDate?: string;
+  scheduleStep?: number;
+  schedulePage?: number;
 }
 
 export interface Slot {
@@ -276,90 +128,54 @@ export interface Slot {
 }
 
 /** Date-keyed (`Y-m-d`) map → slots for that day. Empty days are `[]`. */
-export type SchedulerResult = Record<string, Slot[]>;
+export type SlotSchedule = Record<string, Slot[]>;
 
 // ---------- appointments ----------
 
-export type AppointmentType = "interview" | "appointment";
-
-export interface ReserveInterviewInput {
+export interface ReserveInput {
+  slotId: number | string;
   doctorId: number | string;
-  /** `Y-m-d H:i`, today..+21. */
-  appointmentDate: string;
-  appointmentType?: AppointmentType;
+  user: BookingUser;
 }
 
-export interface PhysicalAppointmentInput {
-  doctorId: number | string;
-  /** `Y-m-d H:i`. */
-  appointmentDate: string;
+export interface InstantReserveInput {
+  user: BookingUser;
 }
 
-// ---------- payments ----------
+/** Turns a reservation into an appointment. Both fields come from the reservation response. */
+export interface CreateAppointmentInput {
+  hash: string;
+  outherProcessId: number | string;
+}
 
-export type DiscountCheckType =
-  | "question"
-  | "appointment"
-  | "lab"
-  | "special"
-  | "physicallyAppointment"
-  | "tmcLab"
-  | "program";
+export interface AppointmentWithoutSlotInput {
+  doctorId: number | string;
+  /** `Y-m-d H:i`, today or later. */
+  startDate: string;
+  /** `Y-m-d H:i`, after `startDate`. */
+  finishDate: string;
+  isOutherDoctor?: 0 | 1;
+  user: BookingUser;
+}
 
-export interface DiscountCheckInput {
-  checkType: DiscountCheckType;
-  discountCode: string;
-  /** Required except `lab` / `tmcLab` / `program`. */
+/**
+ * Addresses one appointment either by its process (`hash` + `outherProcessId`)
+ * or by its coordinates (`doctorId` + `appointmentDate` + `isOutherDoctor`).
+ * Supply one pair or the other.
+ */
+export interface AppointmentLookupInput {
+  hash?: string;
+  outherProcessId?: number | string;
   doctorId?: number | string;
-  orderId?: number | string;
-  specialServiceId?: number | string;
-  programSlug?: string;
-}
-
-export type DiscountResult = Record<string, unknown>;
-
-export interface CardInfo {
-  cardHolder: string;
-  cardNumber: string;
-  /** `m`. */
-  cardExpMonth: string;
-  /** `Y`. */
-  cardExpYear: string;
-  cardCvv: string;
-}
-
-export interface SavedCard {
-  id: number;
-  card_holder_name?: string;
-  /** Masked. */
-  card_number?: string;
-  card_type?: string;
-  created_at?: string;
-  [k: string]: unknown;
-}
-
-export interface PaymentInput {
-  doctorId: number | string;
   /** `Y-m-d H:i`. */
-  appointmentDate: string;
-  appointmentType?: AppointmentType;
-  is3D: boolean;
-  termsAccept: boolean;
-  /** A new card (all-or-none) … */
-  cardInfo?: CardInfo;
-  /** … or a saved card id (from `getCards`). */
-  cardId?: number | string;
-  /** `1` tokenizes the card. */
-  saveCard?: 0 | 1;
-  discountCode?: string;
-  /** Opaque encrypted blob, passed through verbatim. */
-  caseDetail?: string;
+  appointmentDate?: string;
+  isOutherDoctor?: 0 | 1;
 }
 
-/** On 3DS success, `payment3DUrl` is a browser URL to open. */
-export interface PaymentResult {
-  payment3DUrl?: string;
-  [k: string]: unknown;
+export interface AppointmentListInput {
+  phoneNumber: string;
+  page?: number | string;
+  type?: "normal" | "instant";
 }
 
 // ---------- measures ----------
@@ -395,78 +211,23 @@ export interface MeasureFields {
   [field: string]: string | number;
 }
 
-export interface PartnerHealthInput {
+/** Body of the legacy `teusan` bulk endpoint. Flat by design — no `patient` object. */
+export interface HealthInformationInput {
   identity?: string;
   phoneNumber?: string;
   data: MeasureRecord[];
 }
 
-// ---------- skin (AI image analysis — "Cildimde Neyim Var") ----------
-
-/** One skin photo to analyze. `image` is base64 (a `data:…;base64,` prefix is allowed). */
-export interface SkinImage {
-  image: string;
-  /** Optionally tag the stored media with a clinic branch. */
-  branch_id?: number;
-}
-
-/** Per-image analysis result. Fields may be empty/null when the classifier is uncertain. */
-export interface SkinAnalysis {
-  id: number;
-  isClear?: boolean;
-  isBright?: boolean;
-  /** Lesion class from the classifier. */
-  label?: string;
-  /** Patient-friendly Turkish AI summary. */
-  comment?: string | null;
-  confidence?: number | null;
-  /** Stored media relative path. */
-  image?: string | null;
-  error?: string | null;
-  /** Candidate ICD code(s). */
-  possible_icd?: unknown;
-  /** Opaque encrypted blob; can be forwarded verbatim as a payment's `caseDetail`. */
-  case_detail?: string;
-  [k: string]: unknown;
-}
-
-export interface SkinAnalysisResult {
-  status: SkinAnalysis[];
-  [k: string]: unknown;
-}
-
-// ---------- meals (AI meal-photo analysis) ----------
-
-export type PortionSize = "small" | "medium" | "large" | "custom";
-export type MealType = "breakfast" | "lunch" | "dinner" | "snack";
-
-export interface MealAnalysisInput {
-  /** Base64 image (a `data:…;base64,` prefix is allowed). */
-  image: string;
-  portionSize: PortionSize;
-  /** Required when `portionSize` is `custom`. */
-  portionGrams?: number;
-  mealType: MealType;
-  /** Optional Turkish note (≤1000 chars); the model reads preparation/portion modifiers. */
-  note?: string;
-}
-
-export interface MealAnalysisResult {
-  /** The model's nutrition breakdown; `comment` is a JSON-object string. */
-  status: { comment?: string; [k: string]: unknown };
-  [k: string]: unknown;
-}
-
 // ---------- laboratory ----------
 
-/** Body for `laboratory.order` — pre-order a lab test. All fields required. */
-export interface LabOrderInput {
-  testId: number | string;
-  addressId: number | string;
-  laboratoryId: number | string;
-}
+/**
+ * A laboratory result id exactly as returned by `laboratory.results`.
+ * A plain number is an HBYS lab request; a `-lab` suffix marks a TmcLab order
+ * group. Pass it back verbatim — the SDK does not need to tell them apart.
+ */
+export type LabResultId = string;
 
-/** One entry in the patient's lab results list (`results.foundTests[]`). */
+/** One entry in a lab results list (`results.foundTests[]`). */
 export interface LabResultListItem {
   /** DB id (`"123"`) or a TMC-lab id with a `-lab` suffix (`"4821-lab"`). */
   id: number | string;
@@ -484,7 +245,7 @@ export interface LabResultListItem {
 
 // ---------- diets ----------
 
-/** One entry in the patient's diet lists (`list.foundDiets[]`). */
+/** One entry in a diet list (`list.foundDiets[]`). */
 export interface DietListItem {
   /** Feeds `diets.detail`. */
   list_id: number | string;
@@ -501,108 +262,9 @@ export interface DietListItem {
   [k: string]: unknown;
 }
 
-// ---------- partner (/outher — company-scoped surface) ----------
-
-/**
- * Identifies an existing patient **inside the partner's own company**.
- *
- * Used by every partner *read*. The server never creates a patient on this path
- * and never looks the reference up globally, so a patient the partner has never
- * treated simply resolves to "not found".
- *
- * `identityNumber` is primary. `phoneNumber` is a fallback and is only accepted
- * when it matches exactly one patient — the column is not unique (family members
- * share numbers), and the server fails closed rather than guessing.
- */
-export interface PatientRef {
-  identityNumber?: string;
-  phoneNumber?: string;
+/** Response of `diets.list`. Page size is fixed to 20 server-side. */
+export interface DietList {
+  foundDietsCount: number;
+  foundDiets: DietListItem[];
+  [k: string]: unknown;
 }
-
-/**
- * Identifies a patient for a partner *write*. If no matching patient exists in
- * the partner's company, the server creates one, so the descriptive fields are
- * required here while they are absent from {@link PatientRef}.
- */
-export interface PartnerPatient {
-  name: string;
-  surname: string;
-  phoneNumber: string;
-  identityNumber?: string;
-  email?: string;
-  /** `Y-m-d`. */
-  birthdate?: string;
-  /** ISO country code present in `bas_com_countries.code`. */
-  nationality?: string;
-}
-
-/** The `user` object accepted by the partner booking endpoints. */
-export interface PartnerBookingUser extends PartnerPatient {
-  price?: number;
-}
-
-export interface PartnerReserveInput {
-  slotId: number | string;
-  doctorId: number | string;
-  user: PartnerBookingUser;
-}
-
-export interface PartnerInstantReserveInput {
-  user: PartnerBookingUser;
-}
-
-/** Turns a reservation into an appointment. Both fields come from the reservation response. */
-export interface PartnerCreateAppointmentInput {
-  hash: string;
-  outherProcessId: number | string;
-}
-
-export interface PartnerAppointmentWithoutSlotInput {
-  doctorId: number | string;
-  /** `Y-m-d H:i`, today or later. */
-  startDate: string;
-  /** `Y-m-d H:i`, after `startDate`. */
-  finishDate: string;
-  isOutherDoctor?: 0 | 1;
-  user: PartnerBookingUser;
-}
-
-/**
- * Addresses one appointment either by its process (`hash` + `outherProcessId`)
- * or by its coordinates (`doctorId` + `appointmentDate` + `isOutherDoctor`).
- * Supply one pair or the other.
- */
-export interface PartnerAppointmentLookupInput {
-  hash?: string;
-  outherProcessId?: number | string;
-  doctorId?: number | string;
-  /** `Y-m-d H:i`. */
-  appointmentDate?: string;
-  isOutherDoctor?: 0 | 1;
-}
-
-export interface PartnerAppointmentListInput {
-  phoneNumber: string;
-  page?: number | string;
-  type?: "normal" | "instant";
-}
-
-export interface PartnerCheckDoctorInput {
-  doctorId: number | string;
-  isOutherDoctor: 0 | 1;
-}
-
-export interface PartnerSlotScheduleInput {
-  doctorId: number | string;
-  /** `Y-m-d`. Omit and send `scheduleStep` + `schedulePage` instead. */
-  scheduleDate?: string;
-  scheduleStep?: number;
-  schedulePage?: number;
-}
-
-/**
- * A laboratory result id exactly as returned by `laboratory.results`.
- * A plain number is an HBYS lab request; a `-lab` suffix marks a TmcLab order
- * group. Pass it back verbatim — the SDK does not need to tell them apart.
- */
-export type PartnerLabResultId = string;

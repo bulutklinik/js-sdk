@@ -1,5 +1,6 @@
 import type { FetchLike, ResolvedConfig } from "./config";
 import {
+  AuthenticationError,
   TransportError,
   createApiError,
   type ApiError,
@@ -8,7 +9,12 @@ import {
 import type { TokenStore } from "./token-store";
 import { ResultType, type Envelope, type Lang } from "./types";
 
-export type AuthMode = "public" | "bearer" | "partner";
+/**
+ * `partner` sends the configured partner token; `public` sends no
+ * `Authorization` header. Every endpoint in the SDK is `partner` — `public` is
+ * only reachable through the escape hatch (`client.request`).
+ */
+export type AuthMode = "partner" | "public";
 
 export interface RequestSpec {
   method: "GET" | "POST" | "PUT" | "DELETE";
@@ -19,43 +25,30 @@ export interface RequestSpec {
 }
 
 /**
- * Low-level transport. Builds requests, unwraps the response envelope, maps
- * failures to typed errors, and performs a single silent token refresh + retry
- * on a 401 / `resultType 4`. Concurrent refreshes share one in-flight promise.
+ * Low-level transport. Builds requests, unwraps the response envelope and maps
+ * failures to typed errors.
+ *
+ * There is no silent refresh: a partner token is issued out of band and cannot
+ * be renewed from here, so an expired one (`401` / `resultType 4`) surfaces as
+ * an `AuthenticationError` instead of being retried.
  */
 export class HttpClient {
   readonly tokenStore: TokenStore;
-  readonly clientId: string | undefined;
-  readonly clientSecret: string | undefined;
 
   private readonly baseUrl: string;
   private readonly lang: Lang;
-  private readonly partnerToken: string | undefined;
   private readonly timeoutMs: number;
   private readonly fetchImpl: FetchLike;
-  private refreshInFlight: Promise<void> | null = null;
 
   constructor(config: ResolvedConfig) {
     this.baseUrl = config.baseUrl;
     this.lang = config.lang;
-    this.clientId = config.clientId;
-    this.clientSecret = config.clientSecret;
-    this.partnerToken = config.partnerToken;
     this.tokenStore = config.tokenStore;
     this.timeoutMs = config.timeoutMs;
     this.fetchImpl = config.fetchImpl;
   }
 
-  request<T>(spec: RequestSpec): Promise<T> {
-    return this.send<T>(spec, false);
-  }
-
-  /** Force a token refresh using the stored refresh token. Throws on failure. */
-  async refresh(): Promise<void> {
-    await this.performRefresh();
-  }
-
-  private async send<T>(spec: RequestSpec, isRetry: boolean): Promise<T> {
+  async request<T>(spec: RequestSpec): Promise<T> {
     const response = await this.dispatch(spec);
     const envelope = await this.readEnvelope(response);
 
@@ -63,14 +56,8 @@ export class HttpClient {
       return envelope.data as T;
     }
 
-    const expired = response.status === 401 || envelope.resultType === ResultType.Refresh;
-    if (spec.auth === "bearer" && expired && !isRetry) {
-      const refreshed = await this.ensureRefreshed();
-      if (refreshed) {
-        return this.send<T>(spec, true);
-      }
-    }
-
+    // A revoked token is worth forgetting; an expired one is not, since the
+    // caller may want to inspect it while installing a replacement.
     if (envelope.resultType === ResultType.Logout) {
       await this.tokenStore.clear();
     }
@@ -87,11 +74,17 @@ export class HttpClient {
     const hasBody = spec.body !== undefined && spec.method !== "GET";
     if (hasBody) headers["Content-Type"] = "application/json";
 
-    if (spec.auth === "bearer") {
-      const token = await this.tokenStore.getAccessToken();
-      if (token) headers.Authorization = `Bearer ${token}`;
-    } else if (spec.auth === "partner") {
-      if (this.partnerToken) headers.Authorization = `Bearer ${this.partnerToken}`;
+    if (spec.auth === "partner") {
+      const token = await this.tokenStore.getToken();
+      if (!token) {
+        // Dispatching anyway would only come back as an opaque 401.
+        throw new AuthenticationError("No partner token configured.", {
+          httpStatus: 0,
+          method: spec.method,
+          path: spec.path,
+        });
+      }
+      headers.Authorization = `Bearer ${token}`;
     }
 
     const controller = new AbortController();
@@ -125,43 +118,6 @@ export class HttpClient {
       // Non-JSON body — not expected for the covered endpoints.
       return { errorMessage: text };
     }
-  }
-
-  private async ensureRefreshed(): Promise<boolean> {
-    if (!this.refreshInFlight) {
-      this.refreshInFlight = this.performRefresh().finally(() => {
-        this.refreshInFlight = null;
-      });
-    }
-    try {
-      await this.refreshInFlight;
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  private async performRefresh(): Promise<void> {
-    const refreshToken = await this.tokenStore.getRefreshToken();
-    if (!refreshToken) throw new Error("No refresh token available");
-    if (!this.clientId || !this.clientSecret) {
-      throw new Error("clientId and clientSecret are required to refresh tokens");
-    }
-
-    const response = await this.dispatch({
-      method: "POST",
-      path: "/general/refreshApi",
-      auth: "public",
-      body: { refreshToken, clientId: this.clientId, clientSecretKey: this.clientSecret },
-    });
-    const envelope = await this.readEnvelope(response);
-    const data = envelope.data as { access_token?: string; refresh_token?: string } | undefined;
-
-    if (!response.ok || envelope.resultType !== ResultType.Success || !data?.access_token) {
-      await this.tokenStore.clear();
-      throw new Error("Token refresh failed");
-    }
-    await this.tokenStore.setTokens(data.access_token, data.refresh_token ?? refreshToken);
   }
 
   private toError(spec: RequestSpec, response: Response, envelope: Envelope): ApiError {

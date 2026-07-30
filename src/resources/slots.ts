@@ -1,25 +1,28 @@
 import type { HttpClient } from "../http";
-import type { SchedulerInput, SchedulerResult } from "../models";
+import type { SlotScheduleInput, SlotSchedule } from "../models";
 
-/** Doctor availability (materialized slots). */
+/** Doctor availability. */
 export class SlotsResource {
   constructor(private readonly http: HttpClient) {}
 
   /**
-   * Fetch a doctor's free slots. Returns a date-keyed map of slots. Build the
-   * next step's `appointmentDate` as `"<date> <slotStart>"` (drop the seconds).
+   * Bookable slots for a doctor. Either pass `scheduleDate`, or page through with
+   * `scheduleStep` + `schedulePage`; the server requires one of the two forms.
+   *
+   * Returns a date-keyed map; `slotId` feeds `appointments.reserve`. An
+   * `appointmentDate` elsewhere is the date key plus `slotStart` with the
+   * seconds dropped (`"Y-m-d H:i"`).
    */
-  schedule(input: SchedulerInput): Promise<SchedulerResult> {
-    return this.http.request<SchedulerResult>({
+  schedule(input: SlotScheduleInput): Promise<SlotSchedule> {
+    return this.http.request<SlotSchedule>({
       method: "POST",
-      path: "/patients/doctorScheduler",
-      auth: "bearer",
+      path: "/outher/doctorSlots",
+      auth: "partner",
       body: {
         doctorId: input.doctorId,
-        scheduleDate: input.scheduleDate ?? null,
-        scheduleStep: input.scheduleStep ?? "7",
-        schedulePage: input.schedulePage ?? "1",
-        listType: input.listType,
+        scheduleDate: input.scheduleDate,
+        scheduleStep: input.scheduleStep,
+        schedulePage: input.schedulePage,
       },
     });
   }

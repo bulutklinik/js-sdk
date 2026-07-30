@@ -1,61 +1,150 @@
 import type { HttpClient } from "../http";
-import type { PhysicalAppointmentInput, ReserveInterviewInput } from "../models";
+import type {
+  AppointmentListInput,
+  AppointmentLookupInput,
+  AppointmentWithoutSlotInput,
+  CheckDoctorInput,
+  CreateAppointmentInput,
+  InstantReserveInput,
+  ReserveInput,
+} from "../models";
 
-/** Online reservation, physical appointment and cancellation. */
+/**
+ * The appointment lifecycle.
+ *
+ * The patient is supplied inline as `user` — there is no patient session in this
+ * mode. On write the server materialises the patient inside your company.
+ *
+ * Two booking flows:
+ *
+ * - **Hand off to the patient** — `reserve` returns a `url`; the patient opens it
+ *   in a browser to accept the agreements and pay.
+ * - **You collected the agreements** — `reserveWithoutAgreement` returns a `hash`;
+ *   feed it plus `outherProcessId` into {@link AppointmentsResource.create}.
+ *
+ * **Payment is never taken through the API.** No partner endpoint produces a
+ * financial record; that is what the browser hand-off is for.
+ */
 export class AppointmentsResource {
   constructor(private readonly http: HttpClient) {}
 
-  /** Reserve an online (interview) slot. Resolves to `null` on success. */
-  reserveInterview(input: ReserveInterviewInput): Promise<null> {
-    return this.http.request<null>({
-      method: "POST",
-      path: "/patients/addInterviewDateReservation",
-      auth: "bearer",
-      body: {
-        doctorId: input.doctorId,
-        appointmentDate: input.appointmentDate,
-        appointmentType: input.appointmentType ?? "interview",
-      },
-    });
-  }
-
-  /** Create a physical appointment. */
-  addPhysical(input: PhysicalAppointmentInput): Promise<unknown> {
+  /**
+   * Hold an online slot for the given patient and get back a `url` for the
+   * patient to complete agreements and payment in a browser.
+   */
+  reserve(input: ReserveInput): Promise<unknown> {
     return this.http.request<unknown>({
       method: "POST",
-      path: "/patients/addNewAppointment",
-      auth: "bearer",
-      body: { doctorId: input.doctorId, appointmentDate: input.appointmentDate },
-    });
-  }
-
-  /** Cancel an appointment by event id (`cln_events.id`). */
-  cancel(eventId: number | string): Promise<unknown> {
-    return this.http.request<unknown>({
-      method: "DELETE",
-      path: `/patients/deleteUserAppointment/${eventId}`,
-      auth: "bearer",
+      path: "/outher/reservation",
+      auth: "partner",
+      body: { slotId: input.slotId, doctorId: input.doctorId, user: input.user },
     });
   }
 
   /**
-   * The patient's appointments — `{ foundAppointmentsCount, foundAppointments }`.
-   * Each item's `event_id` is the id to pass to `cancel`; rows with `event_id`
-   * `"0"` are paid-order/refund entries and are not cancellable. Server paging is
-   * disabled, so page 1 (the default) returns the full list.
+   * Same hold as `reserve`, for integrations that collect the agreements
+   * themselves. Returns `{ hash, doctorId, slotId, phoneNumber, reservationExpired }`
+   * — confirm with `create` before `reservationExpired` passes.
    */
-  list(page?: number | string): Promise<unknown> {
-    const path =
-      page !== undefined ? `/patients/userAppointments/${page}` : "/patients/userAppointments";
-    return this.http.request<unknown>({ method: "GET", path, auth: "bearer" });
+  reserveWithoutAgreement(input: ReserveInput): Promise<unknown> {
+    return this.http.request<unknown>({
+      method: "POST",
+      path: "/outher/reservationWithoutAgreement",
+      auth: "partner",
+      body: { slotId: input.slotId, doctorId: input.doctorId, user: input.user },
+    });
   }
 
-  /** The patient's active online-slot reservation holds (with `minute_diff`/`second_diff` countdown). */
-  reservations(): Promise<unknown> {
+  /** Instant reservation — no slot; the server picks an available doctor. */
+  instantReserve(input: InstantReserveInput): Promise<unknown> {
     return this.http.request<unknown>({
-      method: "GET",
-      path: "/patients/userReservations",
-      auth: "bearer",
+      method: "POST",
+      path: "/outher/instantReservation",
+      auth: "partner",
+      body: { user: input.user },
+    });
+  }
+
+  /**
+   * Turn a reservation into a confirmed appointment. Both fields come from the
+   * `reserveWithoutAgreement` response. Returns the appointment plus
+   * `last_delete_time`, the cancellation deadline.
+   */
+  create(input: CreateAppointmentInput): Promise<unknown> {
+    return this.http.request<unknown>({
+      method: "POST",
+      path: "/outher/appointment",
+      auth: "partner",
+      body: { hash: input.hash, outherProcessId: input.outherProcessId },
+    });
+  }
+
+  /**
+   * Book a free-form time range outside the slot grid, for integrations running
+   * their own calendar.
+   */
+  createWithoutSlot(input: AppointmentWithoutSlotInput): Promise<unknown> {
+    return this.http.request<unknown>({
+      method: "POST",
+      path: "/outher/appointmentWithoutSlot",
+      auth: "partner",
+      body: {
+        doctorId: input.doctorId,
+        startDate: input.startDate,
+        finishDate: input.finishDate,
+        isOutherDoctor: input.isOutherDoctor,
+        user: input.user,
+      },
+    });
+  }
+
+  /**
+   * Cancel an appointment created with `createWithoutSlot`. Appointments
+   * confirmed through `create` are **not** cancellable here.
+   */
+  cancelWithoutSlot(input: AppointmentLookupInput): Promise<unknown> {
+    return this.http.request<unknown>({
+      method: "DELETE",
+      path: "/outher/appointmentWithoutSlot",
+      auth: "partner",
+      body: { ...input },
+    });
+  }
+
+  /**
+   * The appointments **you** created for the given phone number — not the
+   * patient's history across the platform.
+   */
+  list(input: AppointmentListInput): Promise<unknown> {
+    return this.http.request<unknown>({
+      method: "POST",
+      path: "/outher/appointments",
+      auth: "partner",
+      body: { phoneNumber: input.phoneNumber, page: input.page, type: input.type },
+    });
+  }
+
+  /** A single appointment, addressed by process or by coordinates. */
+  info(input: AppointmentLookupInput): Promise<unknown> {
+    return this.http.request<unknown>({
+      method: "POST",
+      path: "/outher/appointmentInfo",
+      auth: "partner",
+      body: { ...input },
+    });
+  }
+
+  /**
+   * Whether a doctor is bookable through your integration. Returns
+   * `{ title, name, surname, branch_name, state: "1" }` when they are; fails
+   * with `501` when they are not. Call it before offering a doctor.
+   */
+  checkDoctor(input: CheckDoctorInput): Promise<unknown> {
+    return this.http.request<unknown>({
+      method: "POST",
+      path: "/outher/checkDoctor",
+      auth: "partner",
+      body: { doctorId: input.doctorId, isOutherDoctor: input.isOutherDoctor },
     });
   }
 }

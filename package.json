@@ -1,7 +1,7 @@
 {
   "name": "@bulutklinik/sdk",
-  "version": "0.6.0",
-  "description": "Official Bulutklinik API SDK for JavaScript / TypeScript",
+  "version": "1.0.0",
+  "description": "Official Bulutklinik partner API SDK for JavaScript / TypeScript",
   "license": "MIT",
   "author": "Bulutklinik",
   "homepage": "https://github.com/bulutklinik/js-sdk#readme",

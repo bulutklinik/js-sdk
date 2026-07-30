@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   AuthenticationError,
+  AuthorizationError,
   BulutklinikClient,
   MemoryTokenStore,
   NotFoundError,
@@ -10,52 +11,98 @@ import {
 } from "../src/index";
 import { authHeader, bodyOf, jsonResponse, makeFetch } from "./helpers";
 
-describe("transport", () => {
-  it("unwraps data on success and sends bearer + lang headers", async () => {
-    const { fetchImpl, calls } = makeFetch(() =>
-      jsonResponse({ resultType: 0, data: { searchedDoctors: [] } }),
-    );
-    const client = new BulutklinikClient({
+const BASE = "https://apitest.bulutklinik.com/api/v3";
+
+function client(handler: Parameters<typeof makeFetch>[0], token: string | null = "PT") {
+  const { fetchImpl, calls } = makeFetch(handler);
+  return {
+    client: new BulutklinikClient({
       environment: "test",
       fetch: fetchImpl,
-      tokenStore: new MemoryTokenStore({ accessToken: "abc" }),
-    });
+      ...(token === null ? {} : { partnerToken: token }),
+    }),
+    calls,
+  };
+}
 
-    const res = await client.doctors.quickSearch({ searchText: "kardiyo" });
+const ok = () => jsonResponse({ resultType: 0, data: { ok: true } });
 
-    expect(res).toEqual({ searchedDoctors: [] });
-    expect(calls[0]!.url).toBe("https://apitest.bulutklinik.com/api/v3/patients/quickSearch");
-    expect(authHeader(calls[0]!)).toBe("Bearer abc");
+describe("transport", () => {
+  it("unwraps data and sends the partner token + lang header", async () => {
+    const { client: c, calls } = client(() =>
+      jsonResponse({ resultType: 0, data: { foundDoctorsCount: 0, foundDoctors: [] } }),
+    );
+
+    const res = await c.doctors.search({ currentPage: 1 });
+
+    expect(res).toEqual({ foundDoctorsCount: 0, foundDoctors: [] });
+    expect(calls[0]!.url).toBe(`${BASE}/outher/search`);
+    expect(authHeader(calls[0]!)).toBe("Bearer PT");
     expect(new Headers(calls[0]!.init.headers).get("lang")).toBe("tr");
-    expect(bodyOf(calls[0]!)).toEqual({ searchText: "kardiyo", listType: null, location: null });
+    expect(bodyOf(calls[0]!)).toEqual({ searchParams: {}, orderParams: [], currentPage: 1 });
   });
 
-  it("request() escape hatch calls an arbitrary path with a bearer token", async () => {
-    const { fetchImpl, calls } = makeFetch(() =>
-      jsonResponse({ resultType: 0, data: { ok: true } }),
-    );
-    const client = new BulutklinikClient({
+  it("targets v4 when asked, without changing any path", async () => {
+    const { fetchImpl, calls } = makeFetch(ok);
+    const c = new BulutklinikClient({
       environment: "test",
+      apiVersion: "v4",
+      partnerToken: "PT",
       fetch: fetchImpl,
-      tokenStore: new MemoryTokenStore({ accessToken: "abc" }),
     });
 
-    const res = await client.request<{ ok: boolean }>({
-      method: "GET",
-      path: "/patients/customEndpoint",
-    });
+    await c.doctors.branches();
+
+    expect(calls[0]!.url).toBe("https://apitest.bulutklinik.com/api/v4/outher/branches");
+  });
+
+  it("refuses to dispatch without a token instead of sending an anonymous request", async () => {
+    let dispatched = 0;
+    const { client: c } = client(() => {
+      dispatched += 1;
+      return ok();
+    }, null);
+
+    await expect(c.doctors.branches()).rejects.toBeInstanceOf(AuthenticationError);
+    expect(dispatched).toBe(0);
+  });
+
+  it("rejects partnerToken and tokenStore together", () => {
+    expect(
+      () =>
+        new BulutklinikClient({
+          partnerToken: "PT",
+          tokenStore: new MemoryTokenStore("OTHER"),
+        }),
+    ).toThrow(/not both/i);
+  });
+
+  it("reads the token from the store on every call, so rotation takes effect", async () => {
+    const store = new MemoryTokenStore("first");
+    const { fetchImpl, calls } = makeFetch(ok);
+    const c = new BulutklinikClient({ environment: "test", tokenStore: store, fetch: fetchImpl });
+
+    await c.doctors.branches();
+    await store.setToken("second");
+    await c.doctors.branches();
+
+    expect(calls.map(authHeader)).toEqual(["Bearer first", "Bearer second"]);
+  });
+
+  it("request() escape hatch defaults to the partner token", async () => {
+    const { client: c, calls } = client(() => jsonResponse({ resultType: 0, data: { ok: true } }));
+
+    const res = await c.request<{ ok: boolean }>({ method: "GET", path: "/outher/customEndpoint" });
 
     expect(res).toEqual({ ok: true });
-    expect(calls[0]!.url).toBe("https://apitest.bulutklinik.com/api/v3/patients/customEndpoint");
-    expect(calls[0]!.init.method).toBe("GET");
-    expect(authHeader(calls[0]!)).toBe("Bearer abc");
+    expect(calls[0]!.url).toBe(`${BASE}/outher/customEndpoint`);
+    expect(authHeader(calls[0]!)).toBe("Bearer PT");
   });
 
-  it("request() escape hatch sends a public POST body and unwraps data", async () => {
-    const { fetchImpl, calls } = makeFetch(() => jsonResponse({ resultType: 0, data: { id: 7 } }));
-    const client = new BulutklinikClient({ environment: "test", fetch: fetchImpl });
+  it("request() can still reach a public endpoint", async () => {
+    const { client: c, calls } = client(() => jsonResponse({ resultType: 0, data: { id: 7 } }));
 
-    const res = await client.request({
+    const res = await c.request({
       method: "POST",
       path: "/general/somePublicEndpoint",
       auth: "public",
@@ -63,132 +110,75 @@ describe("transport", () => {
     });
 
     expect(res).toEqual({ id: 7 });
-    expect(calls[0]!.init.method).toBe("POST");
     expect(authHeader(calls[0]!)).toBeNull();
     expect(bodyOf(calls[0]!)).toEqual({ foo: "bar" });
   });
 
   it("maps 422 to ValidationError", async () => {
-    const { fetchImpl } = makeFetch(() =>
+    const { client: c } = client(() =>
       jsonResponse({ resultType: 1, errorType: "validation", errorMessage: "bad" }, 422),
     );
-    const client = new BulutklinikClient({ environment: "test", fetch: fetchImpl });
-    await expect(client.doctors.branches()).rejects.toBeInstanceOf(ValidationError);
+    await expect(c.doctors.branches()).rejects.toBeInstanceOf(ValidationError);
+  });
+
+  it("maps 403 to AuthorizationError — wrong scope or no company on the token", async () => {
+    const { client: c } = client(() => jsonResponse({ resultType: 1 }, 403));
+    await expect(c.doctors.branches()).rejects.toBeInstanceOf(AuthorizationError);
   });
 
   it("maps 404 and 429", async () => {
-    const notFound = new BulutklinikClient({
-      environment: "test",
-      fetch: makeFetch(() => jsonResponse({ resultType: 1 }, 404)).fetchImpl,
-    });
+    const { client: notFound } = client(() => jsonResponse({ resultType: 1 }, 404));
     await expect(notFound.doctors.branches()).rejects.toBeInstanceOf(NotFoundError);
 
-    const rate = new BulutklinikClient({
-      environment: "test",
-      fetch: makeFetch(() => jsonResponse({ resultType: 1 }, 429, { "retry-after": "30" })).fetchImpl,
-    });
+    const { client: rate } = client(() =>
+      jsonResponse({ resultType: 1 }, 429, { "retry-after": "30" }),
+    );
     await expect(rate.doctors.branches()).rejects.toBeInstanceOf(RateLimitError);
   });
 
   it("handles a numeric errorType without crashing (live-found case)", async () => {
-    const { fetchImpl } = makeFetch(() =>
+    const { client: c } = client(() =>
       jsonResponse({ resultType: 1, errorType: 1, errorMessage: "Bilinmeyen bir hata oluştu." }, 404),
     );
-    const client = new BulutklinikClient({
-      environment: "test",
-      fetch: fetchImpl,
-      tokenStore: new MemoryTokenStore({ accessToken: "a" }),
-    });
-    await expect(
-      client.doctors.quickSearch({ searchText: "kardiyo" }),
-    ).rejects.toBeInstanceOf(NotFoundError);
+    await expect(c.doctors.branches()).rejects.toBeInstanceOf(NotFoundError);
   });
 
-  it("refreshes once on 401 then retries with the new token", async () => {
-    let dataCalls = 0;
-    const { fetchImpl, calls } = makeFetch((url) => {
-      if (url.endsWith("/general/refreshApi")) {
-        return jsonResponse({ resultType: 0, data: { access_token: "new", refresh_token: "newr" } });
-      }
-      dataCalls += 1;
-      return dataCalls === 1
-        ? jsonResponse({ resultType: 4 }, 401)
-        : jsonResponse({ resultType: 0, data: { ok: true } });
+  it("surfaces an expired token (resultType 4) without retrying", async () => {
+    let attempts = 0;
+    const store = new MemoryTokenStore("expired");
+    const { fetchImpl } = makeFetch(() => {
+      attempts += 1;
+      return jsonResponse({ resultType: 4, errorMessage: "You must log in for this process." }, 401);
     });
-    const store = new MemoryTokenStore({ accessToken: "old", refreshToken: "r" });
-    const client = new BulutklinikClient({
-      environment: "test",
-      clientId: "c",
-      clientSecret: "s",
-      fetch: fetchImpl,
-      tokenStore: store,
-    });
+    const c = new BulutklinikClient({ environment: "test", tokenStore: store, fetch: fetchImpl });
 
-    const res = await client.measures.last();
-
-    expect(res).toEqual({ ok: true });
-    expect(await store.getAccessToken()).toBe("new");
-    expect(authHeader(calls.at(-1)!)).toBe("Bearer new");
-  });
-
-  it("retries at most once and clears the store when refresh fails", async () => {
-    let refreshCalls = 0;
-    const { fetchImpl } = makeFetch((url) => {
-      if (url.endsWith("/general/refreshApi")) {
-        refreshCalls += 1;
-        return jsonResponse({ resultType: 1 }, 401);
-      }
-      return jsonResponse({ resultType: 4 }, 401);
-    });
-    const store = new MemoryTokenStore({ accessToken: "old", refreshToken: "r" });
-    const client = new BulutklinikClient({
-      environment: "test",
-      clientId: "c",
-      clientSecret: "s",
-      fetch: fetchImpl,
-      tokenStore: store,
-    });
-
-    await expect(client.measures.last()).rejects.toBeInstanceOf(AuthenticationError);
-    expect(refreshCalls).toBe(1);
-    expect(await store.getAccessToken()).toBeNull();
+    await expect(c.measures.last({ identityNumber: "12345678901" })).rejects.toThrow(
+      /cannot refresh it/i,
+    );
+    expect(attempts).toBe(1);
+    // An expired token is kept: the caller may want to inspect it while
+    // installing the replacement. Only a revoked one is cleared.
+    expect(await store.getToken()).toBe("expired");
   });
 
   it("clears the store and throws on logout (resultType 2)", async () => {
-    const store = new MemoryTokenStore({ accessToken: "a", refreshToken: "r" });
-    const { fetchImpl } = makeFetch(() => jsonResponse({ resultType: 2, errorMessage: "logged out" }));
-    const client = new BulutklinikClient({ environment: "test", fetch: fetchImpl, tokenStore: store });
+    const store = new MemoryTokenStore("revoked");
+    const { fetchImpl } = makeFetch(() =>
+      jsonResponse({ resultType: 2, errorMessage: "logged out" }),
+    );
+    const c = new BulutklinikClient({ environment: "test", tokenStore: store, fetch: fetchImpl });
 
-    await expect(client.measures.last()).rejects.toBeInstanceOf(AuthenticationError);
-    expect(await store.getAccessToken()).toBeNull();
+    await expect(c.measures.last({ identityNumber: "12345678901" })).rejects.toBeInstanceOf(
+      AuthenticationError,
+    );
+    expect(await store.getToken()).toBeNull();
   });
 
   it("wraps network failures in TransportError", async () => {
     const fetchImpl = (async () => {
       throw new Error("boom");
     }) as typeof fetch;
-    const client = new BulutklinikClient({ environment: "test", fetch: fetchImpl });
-    await expect(client.doctors.branches()).rejects.toBeInstanceOf(TransportError);
-  });
-
-  it("builds the measure list path and uses the partner token", async () => {
-    const { fetchImpl, calls } = makeFetch(() => jsonResponse({ resultType: 0, data: null }));
-    const client = new BulutklinikClient({
-      environment: "test",
-      partnerToken: "PT",
-      fetch: fetchImpl,
-      tokenStore: new MemoryTokenStore({ accessToken: "a" }),
-    });
-
-    await client.measures.list("glucose", 1, 0);
-    expect(calls[0]!.url).toBe(
-      "https://apitest.bulutklinik.com/api/v3/patients/userMeasuresList/glucose/1/0",
-    );
-
-    await client.measures.partnerHealthInformation({
-      phoneNumber: "5551112233",
-      data: [{ type: "pulse", date_time: "2026-06-17 09:00", pulse: 72 }],
-    });
-    expect(authHeader(calls.at(-1)!)).toBe("Bearer PT");
+    const c = new BulutklinikClient({ environment: "test", partnerToken: "PT", fetch: fetchImpl });
+    await expect(c.doctors.branches()).rejects.toBeInstanceOf(TransportError);
   });
 });

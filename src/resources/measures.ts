@@ -1,95 +1,126 @@
 import type { HttpClient } from "../http";
 import type {
   GraphPeriod,
+  HealthInformationInput,
   MeasureFields,
   MeasureRecord,
   MeasureType,
-  PartnerHealthInput,
+  PatientInput,
+  PatientRef,
 } from "../models";
 
-/** Health measurements: CRUD, latest, history list, graph and partner submission. */
+/**
+ * Health measurements.
+ *
+ * **Scope:** measurements are written into and read from **your own company**.
+ * Values the patient entered in the Bulutklinik mobile app live in the consumer
+ * tenant and are *not* visible here — and a value you write does not appear in
+ * their app. That is a consequence of tenant isolation, not a bug.
+ *
+ * Writes take the full {@link PatientInput} (the patient is created inside your
+ * company if absent); reads and edits take the lighter {@link PatientRef}.
+ */
 export class MeasuresResource {
   constructor(private readonly http: HttpClient) {}
 
-  /** Submit multiple measurements of any types in one call (primary entrypoint). */
-  addList(records: MeasureRecord[]): Promise<unknown> {
+  /** Most recent value of every measurement type. */
+  last(patient: PatientRef): Promise<unknown> {
     return this.http.request<unknown>({
       method: "POST",
-      path: "/patients/addNewUserMeasures",
-      auth: "bearer",
-      body: { data: records },
+      path: "/outher/lastMeasures",
+      auth: "partner",
+      body: { patient },
     });
   }
 
-  /** Submit a single measurement of one type. */
-  add(type: MeasureType, fields: MeasureFields): Promise<unknown> {
-    return this.http.request<unknown>({
-      method: "POST",
-      path: `/patients/addNewUserMeasures/${type}`,
-      auth: "bearer",
-      body: fields,
-    });
-  }
-
-  update(
+  /** Paginated history of one type. `glucoseType` applies to `glucose` only. */
+  list(
+    patient: PatientRef,
     type: MeasureType,
-    input: { id: number | string } & MeasureFields,
+    page?: number | string,
+    glucoseType?: 0 | 1,
+  ): Promise<unknown> {
+    return this.http.request<unknown>({
+      method: "POST",
+      path: `/outher/measuresList/${type}`,
+      auth: "partner",
+      body: { patient, currentPage: page, glucoseType },
+    });
+  }
+
+  /** Time-bucketed series. `period`: 1=day, 2=week, 3=month, 4=year. */
+  graph(
+    patient: PatientRef,
+    type: MeasureType,
+    period: GraphPeriod,
+    page?: number | string,
+    glucoseType?: 0 | 1,
+  ): Promise<unknown> {
+    return this.http.request<unknown>({
+      method: "POST",
+      path: `/outher/measuresGraph/${type}/${period}`,
+      auth: "partner",
+      body: { patient, currentPage: page, glucoseType },
+    });
+  }
+
+  /**
+   * Write several measurements of mixed types in one transaction.
+   * Capped at **200 items** per call by the server.
+   */
+  addList(patient: PatientInput, data: MeasureRecord[]): Promise<unknown> {
+    return this.http.request<unknown>({
+      method: "POST",
+      path: "/outher/measures",
+      auth: "partner",
+      body: { patient, data },
+    });
+  }
+
+  /** Write a single measurement. */
+  add(patient: PatientInput, type: MeasureType, fields: MeasureFields): Promise<unknown> {
+    return this.http.request<unknown>({
+      method: "POST",
+      path: `/outher/measure/${type}`,
+      auth: "partner",
+      body: { patient, ...fields },
+    });
+  }
+
+  /** Update one measurement row. `id` comes from `list`. */
+  update(
+    patient: PatientRef,
+    type: MeasureType,
+    id: number | string,
+    fields: MeasureFields,
   ): Promise<unknown> {
     return this.http.request<unknown>({
       method: "PUT",
-      path: `/patients/updateUserMeasures/${type}`,
-      auth: "bearer",
-      body: input,
+      path: `/outher/measure/${type}`,
+      auth: "partner",
+      body: { patient, id, ...fields },
     });
   }
 
-  delete(type: MeasureType, id: number | string): Promise<unknown> {
+  /** Delete one measurement row. */
+  delete(patient: PatientRef, type: MeasureType, id: number | string): Promise<unknown> {
     return this.http.request<unknown>({
       method: "DELETE",
-      path: `/patients/deleteUserMeasures/${type}`,
-      auth: "bearer",
-      body: { id },
+      path: `/outher/measure/${type}`,
+      auth: "partner",
+      body: { patient, id },
     });
   }
 
-  /** Latest value of each measurement type. */
-  last(): Promise<Record<string, unknown>> {
-    return this.http.request<Record<string, unknown>>({
-      method: "GET",
-      path: "/patients/measuresList",
-      auth: "bearer",
-    });
-  }
-
-  /** Paginated history for one type. `glucoseType` (0/1) applies only to glucose. */
-  list(
-    type: MeasureType,
-    page: number | string,
-    glucoseType?: 0 | 1,
-  ): Promise<unknown> {
-    const path =
-      glucoseType !== undefined
-        ? `/patients/userMeasuresList/${type}/${page}/${glucoseType}`
-        : `/patients/userMeasuresList/${type}/${page}`;
-    return this.http.request<unknown>({ method: "GET", path, auth: "bearer" });
-  }
-
-  /** Grouped graph data. `period`: 1=day, 2=week, 3=month, 4=year. */
-  graph(
-    type: MeasureType,
-    period: GraphPeriod,
-    page: number | string,
-    glucoseType?: 0 | 1,
-  ): Promise<unknown> {
-    const path =
-      glucoseType !== undefined
-        ? `/patients/userMeasuresGraph/${type}/${period}/${page}/${glucoseType}`
-        : `/patients/userMeasuresGraph/${type}/${period}/${page}`;
-    return this.http.request<unknown>({ method: "GET", path, auth: "bearer" });
-  }
-
-  /** Partner (teusan) submission — uses the configured partner token. */
-  partnerHealthInformation(input: PartnerHealthInput): Promise<unknown> {
+  /**
+   * Legacy bulk submission for `teusan` integrations.
+   *
+   * @deprecated Requires the `teusan` scope instead of `apiouther`, takes a flat
+   * `identity` + `phoneNumber` instead of `patient`, and writes into the shared
+   * consumer tenant rather than your own company — so the values are not
+   * readable through `last` / `list`. Prefer {@link addList}.
+   */
+  healthInformation(input: HealthInformationInput): Promise<unknown> {
     return this.http.request<unknown>({
       method: "POST",
       path: "/outher/healthInformation",

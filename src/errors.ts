@@ -45,9 +45,14 @@ export class ApiError extends BulutklinikError {
 
 /** 422 / errorType=validation. */
 export class ValidationError extends ApiError {}
-/** 401, a logout (resultType 2), or a failed token refresh. */
+/** 401, a revoked token (resultType 2), or an expired one (resultType 4). */
 export class AuthenticationError extends ApiError {}
-/** 403 — authenticated but not permitted / out of scope. */
+/**
+ * 403 — the token authenticated but is not permitted. Either it lacks the
+ * `apiouther` scope or it resolves to a user with no company. The company
+ * boundary comes from the token, never from request input, so retrying with
+ * different body parameters will not help.
+ */
 export class AuthorizationError extends ApiError {}
 /** 404. */
 export class NotFoundError extends ApiError {}
@@ -64,10 +69,19 @@ export class RateLimitError extends ApiError {
 
 /**
  * Map an API failure to the most specific error type.
- * Precedence: logout (resultType 2) → errorType=validation → HTTP status.
+ * Precedence: revoked/expired token (resultType 2 or 4) → errorType=validation
+ * → HTTP status.
  */
 export function createApiError(ctx: ApiErrorContext, message: string): ApiError {
   if (ctx.resultType === 2) return new AuthenticationError(message, ctx);
+  // `resultType 4` used to trigger a silent refresh. On the partner surface
+  // there is nothing to refresh, so say what the caller actually has to do.
+  if (ctx.resultType === 4) {
+    return new AuthenticationError(
+      `${message} The partner token is expired or invalid — install a newly issued token; the SDK cannot refresh it.`,
+      ctx,
+    );
+  }
 
   const type = typeof ctx.errorType === "string" ? ctx.errorType.toLowerCase() : undefined;
   if (type === "validation" || ctx.httpStatus === 422) {
