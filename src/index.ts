@@ -1,7 +1,7 @@
 export { BulutklinikClient } from "./client";
 
-export { MemoryTokenStore } from "./token-store";
-export type { TokenStore } from "./token-store";
+export { MemoryTokenStore, isRefreshTokenStore } from "./token-store";
+export type { RefreshTokenStore, TokenStore } from "./token-store";
 
 export { ENVIRONMENT_API_ROOTS, resolveBaseUrl } from "./config";
 export type { ApiVersion, ClientOptions, Environment, FetchLike } from "./config";
@@ -23,6 +23,7 @@ export { ResultType } from "./types";
 export type { Envelope, Lang, ResultTypeValue } from "./types";
 
 export { AppointmentsResource } from "./resources/appointments";
+export { AuthResource } from "./resources/auth";
 export { DietsResource } from "./resources/diets";
 export { DoctorsResource } from "./resources/doctors";
 export { LaboratoryResource } from "./resources/laboratory";

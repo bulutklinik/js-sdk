@@ -45,7 +45,7 @@ export class ApiError extends BulutklinikError {
 
 /** 422 / errorType=validation. */
 export class ValidationError extends ApiError {}
-/** 401, a revoked token (resultType 2), or an expired one (resultType 4). */
+/** 401 after a failed or impossible refresh, or a revoked session (resultType 2). */
 export class AuthenticationError extends ApiError {}
 /**
  * 403 — the token authenticated but is not permitted. Either it lacks the
@@ -69,16 +69,16 @@ export class RateLimitError extends ApiError {
 
 /**
  * Map an API failure to the most specific error type.
- * Precedence: revoked/expired token (resultType 2 or 4) → errorType=validation
- * → HTTP status.
+ * Precedence: revoked session (resultType 2) → unrefreshable expiry (4) →
+ * errorType=validation → HTTP status.
  */
 export function createApiError(ctx: ApiErrorContext, message: string): ApiError {
   if (ctx.resultType === 2) return new AuthenticationError(message, ctx);
-  // `resultType 4` used to trigger a silent refresh. On the partner surface
-  // there is nothing to refresh, so say what the caller actually has to do.
+  // `resultType 4` reaches here only when the silent refresh could not run or
+  // failed — the transport retries first (DESIGN.md §5.4).
   if (ctx.resultType === 4) {
     return new AuthenticationError(
-      `${message} The partner token is expired or invalid — install a newly issued token; the SDK cannot refresh it.`,
+      `${message} The access token is expired and could not be refreshed — call auth.connect again.`,
       ctx,
     );
   }

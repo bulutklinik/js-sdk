@@ -6,13 +6,13 @@ runtime dependencies (uses the platform `fetch`), fully typed, ESM + CJS.
 This is a single-persona SDK: every call runs on the company-scoped `/outher`
 surface with the partner token issued for your integration. You act on the
 patients of **your own company**, and the patient is named inline on each
-request — there is no login and no session. See [`DESIGN.md`](./DESIGN.md) for
+request — there is no patient session. See [`DESIGN.md`](./DESIGN.md) for
 the full wire contract.
 
-> **1.0.0 is a breaking release.** The patient persona (login, registration,
-> payments, AI analysis, address book) has been removed and the former
-> `client.partner.*` namespace was lifted to the client root. See
-> [CHANGELOG.md](./CHANGELOG.md) and DESIGN.md §12 for the migration.
+> **1.1.0 restores `client.auth`.** 1.0.x wrongly assumed the partner token could
+> only be issued out of band; it is in fact minted by `connectApi` from your
+> portal credentials, and it is refreshable. Existing 1.0.x code that passes
+> `partnerToken` keeps working. See [CHANGELOG.md](./CHANGELOG.md).
 
 ## Install
 
@@ -30,7 +30,14 @@ import { BulutklinikClient } from "@bulutklinik/sdk";
 const client = new BulutklinikClient({
   environment: "production",  // "production" | "test" | "local"
   apiVersion: "v3",           // "v3" (default) | "v4"
-  partnerToken: process.env.BK_PARTNER_TOKEN,
+  clientId: process.env.BK_CLIENT_ID,
+  clientSecret: process.env.BK_CLIENT_SECRET,
+});
+
+// 0) Log in. Tokens are stored and refreshed for you.
+await client.auth.connect({
+  apiUserName: process.env.BK_SERVICE_IDENTITY,  // from your portal application
+  apiUserPassword: process.env.BK_PASSWORD,      // your portal password
 });
 
 // 1) Find a doctor you can book
@@ -58,10 +65,11 @@ await client.appointments.create({ hash: held.hash, outherProcessId: held.outher
 
 ## Services
 
-28 endpoints across six groups.
+31 endpoints across seven groups.
 
 | Group                 | Methods |
 |-----------------------|---------|
+| `client.auth`         | `connect`, `refresh`, `disconnect` |
 | `client.doctors`      | `search`, `branches`, `detail`, `locations` |
 | `client.slots`        | `schedule` |
 | `client.appointments` | `reserve`, `reserveWithoutAgreement`, `instantReserve`, `create`, `createWithoutSlot`, `cancelWithoutSlot`, `list`, `info`, `checkDoctor` |
@@ -121,47 +129,74 @@ only it.
 
 ## Authentication
 
-The partner token is **issued out of band** through the Bulutklinik Developer
-Platform. It behaves like an API key: there is no login method, and the SDK
-cannot renew it.
+Your portal application issues three values: a **client ID**, a **client secret**
+and a project-specific **service identity**. The password is the one you set when
+registering on the portal. `auth.connect` exchanges them for an access token and
+a refresh token:
+
+```ts
+const client = new BulutklinikClient({ clientId, clientSecret });
+
+await client.auth.connect({
+  apiUserName: "svc@your-app.bulutklinik",
+  apiUserPassword: "…",
+  loginMode: "email", // default
+});
+```
+
+The granted scope comes from the credentials, not from the request — a partner
+application is provisioned with `apiouther`, which is what makes the `/outher`
+surface reachable.
+
+Already holding a token? Pass it instead and skip the login:
 
 ```ts
 const client = new BulutklinikClient({ partnerToken: "…" });
 ```
 
-The token is read from a token store on **every** request, so a long-running
-process can pick up a newly issued one without being rebuilt:
+Pass `partnerToken` **or** `tokenStore`, not both — the constructor rejects it
+rather than guessing which you meant.
+
+### Refresh
+
+Access tokens last ~30 days, refresh tokens ~130. You do not normally call
+`refresh` yourself: on a `401` / `resultType 4` the SDK refreshes once, retries
+the original request, and concurrent calls share a single in-flight refresh.
 
 ```ts
-import type { TokenStore } from "@bulutklinik/sdk";
+await client.auth.refresh();     // only useful to refresh ahead of time
+await client.auth.disconnect();  // revokes both tokens and clears the store
+```
 
-const tokenStore: TokenStore = {
-  getToken: () => readFromVault(),
-  setToken: (t) => writeToVault(t),
+If the refresh fails — or there is no refresh token because you supplied a bare
+`partnerToken` — the call raises `AuthenticationError` and you should
+`auth.connect` again.
+
+### Token storage
+
+Tokens are read from a token store on **every** request, so a long-running
+process can rotate them without being rebuilt:
+
+```ts
+import type { RefreshTokenStore } from "@bulutklinik/sdk";
+
+const tokenStore: RefreshTokenStore = {
+  getToken: () => readFromVault("access"),
+  setToken: (t) => writeToVault("access", t),
+  getRefreshToken: () => readFromVault("refresh"),
+  setRefreshToken: (t) => writeToVault("refresh", t),
   clear: () => wipeVault(),
 };
 
-const client = new BulutklinikClient({ tokenStore });
-
-// …or rotate the default in-memory store in place:
-await client.tokenStore.setToken(newlyIssuedToken);
+const client = new BulutklinikClient({ tokenStore, clientId, clientSecret });
 ```
 
-Pass `partnerToken` **or** `tokenStore`, not both — the constructor rejects it
-rather than guessing which one you meant.
+The refresh methods are **optional**. A plain `TokenStore` — the 1.0.x shape,
+access token only — still works; the SDK then keeps the refresh token in memory,
+so a process restart needs `auth.connect` rather than a refresh.
 
-### When the token expires
-
-Tokens last about 30 days. An expired one comes back as `401` / `resultType 4`;
-the SDK raises `AuthenticationError` and does **not** retry — there is nothing to
-refresh. Recovery is operational: obtain a newly issued token and write it into
-the store.
-
-> This is the one behaviour that changed meaning in 1.0.0. On the patient SDK
-> `resultType 4` meant "the SDK will fix this silently". Here it means the opposite.
-
-A `403` means the credential itself is wrong — either the token lacks the
-`apiouther` scope, or it resolves to a user with no company. The company boundary
+A `403` means the credential itself is wrong: either the granted scope does not
+include `apiouther`, or the account has no company attached. The company boundary
 comes from the token, never from request input, so retrying with different body
 parameters will not help.
 

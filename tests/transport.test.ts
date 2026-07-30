@@ -152,8 +152,10 @@ describe("transport", () => {
     await expect(c.doctors.branches()).rejects.toBeInstanceOf(NotFoundError);
   });
 
-  it("surfaces an expired token (resultType 4) without retrying", async () => {
+  it("surfaces an expired token when there is nothing to refresh with", async () => {
     let attempts = 0;
+    // Seeded with an access token only — no refresh token, so the transport has
+    // no way to recover and must not burn a retry.
     const store = new MemoryTokenStore("expired");
     const { fetchImpl } = makeFetch(() => {
       attempts += 1;
@@ -162,11 +164,10 @@ describe("transport", () => {
     const c = new BulutklinikClient({ environment: "test", tokenStore: store, fetch: fetchImpl });
 
     await expect(c.measures.last({ identityNumber: "12345678901" })).rejects.toThrow(
-      /cannot refresh it/i,
+      /could not be refreshed/i,
     );
     expect(attempts).toBe(1);
-    // An expired token is kept: the caller may want to inspect it while
-    // installing the replacement. Only a revoked one is cleared.
+    // The dead access token is kept; only a revoked session (resultType 2) clears.
     expect(await store.getToken()).toBe("expired");
   });
 

@@ -1,6 +1,50 @@
 /* Request and response shapes for the covered endpoints. Response types index
  * extra fields with `[k: string]: unknown` because the API may add fields. */
 
+// ---------- auth ----------
+
+/** How `apiUserName` is interpreted. The portal issues an e-mail-style identity. */
+export type LoginMode = "email" | "identity" | "phone" | "user_id";
+
+export interface ConnectInput {
+  /** The project-specific service identity from your portal application. */
+  apiUserName: string;
+  /** The password set when registering on the portal. */
+  apiUserPassword: string;
+  /** Defaults to the client's `clientId`. */
+  clientId?: string;
+  /** Defaults to the client's `clientSecret`. */
+  clientSecret?: string;
+  /** Defaults to `"email"`. */
+  loginMode?: LoginMode;
+}
+
+/** Raw `data` of `connectApi`. Either a token pair, or a 2FA challenge. */
+export interface LoginData {
+  access_token?: string;
+  refresh_token?: string;
+  password_policy?: PasswordPolicy;
+  /** Present instead of the tokens when SMS 2FA is enabled. */
+  response?: string;
+  [k: string]: unknown;
+}
+
+export interface PasswordPolicy {
+  must_change?: boolean;
+  reason?: string | null;
+  [k: string]: unknown;
+}
+
+/**
+ * Result of {@link AuthResource.connect}. When `twoFactorRequired` is true no
+ * tokens were stored and `twoFactorResponse` carries the server's challenge blob.
+ */
+export interface LoginResult {
+  twoFactorRequired: boolean;
+  twoFactorResponse?: string;
+  passwordPolicy?: PasswordPolicy;
+}
+
 // ---------- patient references ----------
 
 /**

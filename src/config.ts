@@ -39,8 +39,16 @@ export interface ClientOptions {
   /** Default `lang` header. Default: `tr`. */
   lang?: Lang;
   /**
-   * The partner token issued for your integration. Seeds the default in-memory
-   * token store. Mutually exclusive with `tokenStore`.
+   * OAuth client id from your portal application. Required by `auth.connect`
+   * and by the silent refresh.
+   */
+  clientId?: string;
+  /** OAuth client secret from your portal application. */
+  clientSecret?: string;
+  /**
+   * An already-minted partner access token, for callers who do not want the SDK
+   * to log in. Seeds the default in-memory token store. Mutually exclusive with
+   * `tokenStore`.
    */
   partnerToken?: string;
   /**
@@ -58,6 +66,8 @@ export interface ClientOptions {
 export interface ResolvedConfig {
   baseUrl: string;
   lang: Lang;
+  clientId: string | undefined;
+  clientSecret: string | undefined;
   tokenStore: TokenStore;
   timeoutMs: number;
   fetchImpl: FetchLike;
@@ -90,6 +100,8 @@ export function resolveConfig(options: ClientOptions = {}): ResolvedConfig {
   return {
     baseUrl: base.replace(/\/+$/, ""),
     lang: options.lang ?? "tr",
+    clientId: options.clientId,
+    clientSecret: options.clientSecret,
     tokenStore: options.tokenStore ?? new MemoryTokenStore(options.partnerToken),
     timeoutMs: options.timeoutMs ?? 30_000,
     fetchImpl,

@@ -4,7 +4,8 @@
  *
  * Run against the test environment with your partner token in an env var:
  *
- *   BK_PARTNER_TOKEN, BK_DOCTOR_ID, BK_PATIENT_PHONE, BK_PATIENT_TCKN
+ *   BK_CLIENT_ID, BK_CLIENT_SECRET, BK_SERVICE_IDENTITY, BK_PASSWORD,
+ *   BK_DOCTOR_ID, BK_PATIENT_PHONE, BK_PATIENT_TCKN
  *
  * In this workspace, run with: `npx tsx examples/flow.ts`
  * (When installed from npm, import from "@bulutklinik/sdk" instead of "../src/index".)
@@ -14,7 +15,14 @@ import { BulutklinikClient } from "../src/index";
 async function main(): Promise<void> {
   const client = new BulutklinikClient({
     environment: "test",
-    partnerToken: process.env.BK_PARTNER_TOKEN ?? "",
+    clientId: process.env.BK_CLIENT_ID ?? "",
+    clientSecret: process.env.BK_CLIENT_SECRET ?? "",
+  });
+
+  // 0. Log in. The SDK stores both tokens and refreshes them silently.
+  await client.auth.connect({
+    apiUserName: process.env.BK_SERVICE_IDENTITY ?? "",
+    apiUserPassword: process.env.BK_PASSWORD ?? "",
   });
 
   // 1. Discovery. These need no patient data, so they are the fastest way to

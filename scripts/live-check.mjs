@@ -1,24 +1,26 @@
 // Live smoke test against the Bulutklinik test environment (apitest).
 // Read-only flow; each step is independent and failures are reported, not fatal.
 //
-// Needs a partner token issued for a test company with the `apiouther` scope:
-//   BK_PARTNER_TOKEN=... node scripts/live-check.mjs
+// Needs an approved portal application whose credentials carry `apiouther`:
+//   BK_CLIENT_ID=... BK_CLIENT_SECRET=... BK_SERVICE_IDENTITY=... BK_PASSWORD=... //     node scripts/live-check.mjs
 //
-// Unlike the patient surface there is no shared test credential — the token is
-// per-integration. Steps that touch a patient need one that exists inside the
-// token's own company; set BK_PATIENT_TCKN or BK_PATIENT_PHONE to run them.
+// Credentials are per-integration; there is no shared test account. Steps that
+// touch a patient need one that exists inside the credentials' own company; set
+// BK_PATIENT_TCKN or BK_PATIENT_PHONE to run them.
 import { ApiError, BulutklinikClient } from "../dist/index.js";
 
-const partnerToken = process.env.BK_PARTNER_TOKEN;
-if (!partnerToken) {
-  console.error("BK_PARTNER_TOKEN is required.");
+const required = ["BK_CLIENT_ID", "BK_CLIENT_SECRET", "BK_SERVICE_IDENTITY", "BK_PASSWORD"];
+const missing = required.filter((k) => !process.env[k]);
+if (missing.length) {
+  console.error(`Missing: ${missing.join(", ")}`);
   process.exit(2);
 }
 
 const client = new BulutklinikClient({
   environment: "test",
   apiVersion: process.env.BK_API_VERSION ?? "v3",
-  partnerToken,
+  clientId: process.env.BK_CLIENT_ID,
+  clientSecret: process.env.BK_CLIENT_SECRET,
 });
 
 const results = [];
@@ -36,7 +38,14 @@ async function step(name, fn) {
   }
 }
 
-// --- Scope-only steps: these prove the token and base URL without any patient.
+await step("auth.connect", () =>
+  client.auth.connect({
+    apiUserName: process.env.BK_SERVICE_IDENTITY,
+    apiUserPassword: process.env.BK_PASSWORD,
+  }),
+);
+
+// --- Scope-only steps: these prove the granted scope and base URL, no patient.
 const branches = await step("doctors.branches", () => client.doctors.branches());
 console.log(`    branches=${Array.isArray(branches) ? branches.length : typeof branches}`);
 

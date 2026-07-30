@@ -2,6 +2,7 @@ import { resolveConfig, type ClientOptions } from "./config";
 import { HttpClient, type AuthMode, type RequestSpec } from "./http";
 import type { Lang } from "./types";
 import { AppointmentsResource } from "./resources/appointments";
+import { AuthResource } from "./resources/auth";
 import { DietsResource } from "./resources/diets";
 import { DoctorsResource } from "./resources/doctors";
 import { LaboratoryResource } from "./resources/laboratory";
@@ -13,24 +14,32 @@ import type { TokenStore } from "./token-store";
  * The Bulutklinik partner API client. Construct once and reuse; service groups
  * are exposed as properties.
  *
- * Every call runs on the company-scoped `/outher` surface with the partner token
- * issued for your integration: you see the patients of **your own company**, and
- * the patient is named inline on each request — there is no login and no
- * session.
+ * Every data call runs on the company-scoped `/outher` surface: you see the
+ * patients of **your own company**, and the patient is named inline on each
+ * request — there is no patient session.
  *
  * @example
  * ```ts
  * const client = new BulutklinikClient({
  *   environment: "test",
- *   partnerToken: process.env.BULUTKLINIK_PARTNER_TOKEN,
+ *   clientId: process.env.BK_CLIENT_ID,
+ *   clientSecret: process.env.BK_CLIENT_SECRET,
+ * });
+ *
+ * await client.auth.connect({
+ *   apiUserName: process.env.BK_SERVICE_IDENTITY!,
+ *   apiUserPassword: process.env.BK_PASSWORD!,
  * });
  *
  * const branches = await client.doctors.branches();
- * const slots = await client.slots.schedule({ doctorId: 8282, scheduleDate: "2026-08-01" });
  * const measures = await client.measures.last({ identityNumber: "12345678901" });
  * ```
+ *
+ * Already holding a token? Pass `partnerToken` instead and skip `auth.connect`.
  */
 export class BulutklinikClient {
+  /** Obtain, refresh and revoke the access token. */
+  readonly auth: AuthResource;
   /** Doctor discovery: search, branches, detail, city list. */
   readonly doctors: DoctorsResource;
   /** Doctor availability (materialized slots). */
@@ -56,6 +65,7 @@ export class BulutklinikClient {
     this.http = new HttpClient(config);
     this.tokenStore = config.tokenStore;
 
+    this.auth = new AuthResource(this.http);
     this.doctors = new DoctorsResource(this.http);
     this.slots = new SlotsResource(this.http);
     this.appointments = new AppointmentsResource(this.http);
