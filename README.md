@@ -37,7 +37,7 @@ const client = new BulutklinikClient({
 // 0) Log in. Tokens are stored and refreshed for you.
 await client.auth.connect({
   apiUserName: process.env.BK_SERVICE_IDENTITY,  // from your portal application
-  apiUserPassword: process.env.BK_PASSWORD,      // your portal password
+  apiUserPassword: process.env.BK_APP_PASSWORD,  // this application's password
 });
 
 // 1) Find a doctor you can book
@@ -129,9 +129,11 @@ only it.
 
 ## Authentication
 
-Your portal application issues three values: a **client ID**, a **client secret**
-and a project-specific **service identity**. The password is the one you set when
-registering on the portal. `auth.connect` exchanges them for an access token and
+Your portal application issues four values: a **client ID**, a **client secret**,
+a project-specific **service identity** and an **application password**. The
+password belongs to this application only — it is not your portal account
+password, and you can regenerate it in the portal if it leaks. `auth.connect`
+exchanges them for an access token and
 a refresh token:
 
 ```ts
