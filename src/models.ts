@@ -9,7 +9,7 @@ export type LoginMode = "email" | "identity" | "phone" | "user_id";
 export interface ConnectInput {
   /** The project-specific service identity from your portal application. */
   apiUserName: string;
-  /** The password set when registering on the portal. */
+  /** This application's password from the portal — not your portal account password. */
   apiUserPassword: string;
   /** Defaults to the client's `clientId`. */
   clientId?: string;
