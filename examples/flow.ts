@@ -46,7 +46,7 @@ async function main(): Promise<void> {
   const user = {
     name: "Ada",
     surname: "Lovelace",
-    phoneNumber: process.env.BK_PATIENT_PHONE ?? "+905551112233",
+    phoneNumber: process.env.BK_PATIENT_PHONE ?? "+90 5551112233",
     identityNumber: process.env.BK_PATIENT_TCKN,
   };
 

@@ -56,7 +56,7 @@ const slot = Object.values(schedule)[0]?.[0];
 const held = await client.appointments.reserveWithoutAgreement({
   slotId: slot.slotId,
   doctorId,
-  user: { name: "Ada", surname: "Lovelace", phoneNumber: "+905551112233" },
+  user: { name: "Ada", surname: "Lovelace", phoneNumber: "+90 5551112233" },
 });
 
 // 4) Confirm before `held.reservationExpired` passes
@@ -88,7 +88,7 @@ and never creates anything:
 
 ```ts
 await client.measures.last({ identityNumber: "12345678901" });
-await client.diets.list({ phoneNumber: "+905551112233" });
+await client.diets.list({ phoneNumber: "+90 5551112233" });
 ```
 
 `identityNumber` is primary; `phoneNumber` is a fallback accepted only when it
@@ -101,7 +101,7 @@ company if absent:
 
 ```ts
 await client.measures.addList(
-  { name: "Ada", surname: "Lovelace", phoneNumber: "+905551112233" },
+  { name: "Ada", surname: "Lovelace", phoneNumber: "+90 5551112233" },
   [{ type: "pulse", date_time: "2026-06-17 09:31", pulse: 72 }],
 );
 ```
